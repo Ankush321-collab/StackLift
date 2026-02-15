@@ -1,75 +1,70 @@
-import { exec } from 'child_process';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { exec } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const mime = require('mime-types');
 
 const s3Client = new S3Client({
-    region: "ap-south-2",
+    region: process.env.AWS_REGION || "ap-south-2",
     credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
     }
 });
 
-const projectId = process.env.PROJECT_ID;
+const PROJECT_ID = process.env.PROJECT_ID;
 
 async function init() {
-    console.log("executing script");
-    const outdirpath = path.join(__dirname, "output");
+    console.log('Executing script.js');
+    const outDirPath = path.join(__dirname, 'output');
 
-    const buildCommand = [
-        `cd "${outdirpath}"`,
-        "rm -rf node_modules package-lock.json",
-        "npm install",
-        "npm run build"
-    ].join(" && ");
+    // Create vite.config.js with correct base path
+    const baseUrl = `https://stacklift-vercel-clone.s3.ap-south-2.amazonaws.com/__outputs/${PROJECT_ID}/`;
+    const viteConfig = `
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-    const p = exec(buildCommand);
+export default defineConfig({
+  plugins: [react()],
+  base: '${baseUrl}'
+})
+`;
+    
+    fs.writeFileSync(path.join(outDirPath, 'vite.config.js'), viteConfig);
 
-    p.stdout.on('data', (data) => {
+    const p = exec(`cd ${outDirPath} && npm install && npm run build`);
+
+    p.stdout.on('data', function (data) {
         console.log(data.toString());
     });
 
-    p.stderr.on('data', (data) => {
-        console.error("Error", data.toString());
+    p.stderr.on('data', function (data) {
+        console.log('Error', data.toString());
     });
 
-    p.on('close', async function(code) {
-        if (code !== 0) {
-            console.error(`Build failed with exit code ${code}`);
-            process.exit(code || 1);
-        }
+    p.on('close', async function () {
+        console.log('Build Complete');
+        const distFolderPath = path.join(__dirname, 'output', 'dist');
+        const distFolderContents = fs.readdirSync(distFolderPath, { recursive: true });
 
-        console.log("Build complete");
-        const distpath = path.join(__dirname, 'output', 'dist');
-        if (!fs.existsSync(distpath)) {
-            console.error(`dist folder not found at ${distpath}`);
-            process.exit(1);
-        }
+        for (const file of distFolderContents) {
+            const filePath = path.join(distFolderPath, file);
+            if (fs.lstatSync(filePath).isDirectory()) continue;
 
-        const distfoldercontent = fs.readdirSync(distpath, { recursive: true });
+            console.log('uploading', filePath);
 
-        for (const file of distfoldercontent) {
-            const filepath = path.join(distpath, file);
-
-            if (fs.lstatSync(filepath).isDirectory()) {
-                continue;
-            }
-
-            const relativePath = path.relative(distpath, filepath);
-            const s3Key = `__outputs/${projectId}/${relativePath}`.replace(/\\/g, '/');
             const command = new PutObjectCommand({
-                Bucket:process.env.AWS_S3_BUCKET_NAME,
-                Key: s3Key,
-                Body: fs.createReadStream(filepath)
+                Bucket: process.env.AWS_S3_BUCKET_NAME,
+                Key: `__outputs/${PROJECT_ID}/${file}`,
+                Body: fs.createReadStream(filePath),
+                ContentType: mime.lookup(filePath),
+                ACL: 'public-read'
             });
+
             await s3Client.send(command);
-            console.log(`Uploaded ${file} to S3`);
+            console.log('uploaded', filePath);
         }
+        console.log('Done...');
     });
 
 }

@@ -1,16 +1,16 @@
 {
   "name": "build-server",
   "version": "1.0.0",
+  "description": "",
   "main": "script.js",
-  "type":"module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.989.0",
-    "mime-types": "^3.0.2"
+    "@aws-sdk/client-s3": "^3.511.0",
+    "ioredis": "^5.3.2",
+    "mime-types": "^2.1.35"
   }
 }

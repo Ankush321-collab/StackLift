@@ -6,15 +6,21 @@ A simplified clone of Vercel's deployment platform that automatically builds and
 
 ## 🏗️ Architecture Overview
 
-This project consists of two main components that work together to provide a complete deployment solution:
+This project consists of three main components that work together to provide a complete deployment solution:
 
-### 1. Build Server (`build-server/`)
+### 1. API Server (`api-server/`)
+- **Purpose**: REST API that orchestrates deployment process via AWS ECS
+- **Technology**: Node.js, Express.js, AWS ECS SDK
+- **Port**: 9000
+- **Function**: Receives deployment requests and triggers containerized builds
+
+### 2. Build Server (`build-server/`)
 - **Purpose**: Containerized build service that clones, builds, and deploys React/Vite applications
 - **Technology**: Node.js, Docker, AWS SDK
 - **Infrastructure**: AWS ECS + AWS ECR
 - **Storage**: AWS S3
 
-### 2. S3 Reverse Proxy (`s3-reverse-proxy/`)
+### 3. S3 Reverse Proxy (`s3-reverse-proxy/`)
 - **Purpose**: Routes subdomain requests to corresponding S3-hosted projects
 - **Technology**: Express.js, HTTP Proxy
 - **Port**: 8000
@@ -22,8 +28,8 @@ This project consists of two main components that work together to provide a com
 
 ## 🔄 How It Works
 
-1. **Code Repository**: Developer pushes code to GitHub
-2. **Build Trigger**: Build server receives the repository URL
+1. **API Request**: Developer sends POST request to API server with GitHub repository URL
+2. **ECS Task Trigger**: API server creates and runs ECS task for containerized build
 3. **Containerized Build**: 
    - Docker container clones the repository
    - Installs dependencies (`npm install`)
@@ -33,7 +39,8 @@ This project consists of two main components that work together to provide a com
    - Built files are uploaded to S3 bucket
    - Files are stored under `__outputs/{PROJECT_ID}/`
    - Public read access is configured
-5. **Reverse Proxy Routing**:
+5. **Response**: API server returns project ID for accessing deployed application
+6. **Reverse Proxy Routing**:
    - S3 Reverse Proxy routes `{subdomain}.localhost:8000` to corresponding S3 folder
    - Serves `index.html` for root requests
    - Proxies all static assets (CSS, JS, images)
@@ -42,6 +49,10 @@ This project consists of two main components that work together to provide a com
 
 ```
 vercel-clone/
+├── api-server/
+│   ├── index.js               # Express API server
+│   ├── package.json           # Dependencies (Express, AWS ECS SDK)
+│   └── .env                   # Environment configuration
 ├── build-server/
 │   ├── Dockerfile              # Container configuration
 │   ├── main.sh                # Entry point script
@@ -66,9 +77,19 @@ vercel-clone/
 
 Create `.env` files in respective directories:
 
+#### API Server Environment (`api-server/.env`)
+```bash
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_S3_BUCKET_NAME=stacklift-vercel-clone
+ECS_CLUSTER_NAME=your-ecs-cluster-name
+ECS_TASK_DEFINITION=your-task-definition-name
+```
+
 #### Build Server Environment (`.env`)
 ```bash
-AWS_REGION=ap-south-2
+AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_S3_BUCKET_NAME=stacklift-vercel-clone

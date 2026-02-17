@@ -3,10 +3,33 @@ const express=require('express');
 const app=express();
 const {ECSClient, RunTaskCommand }=require('@aws-sdk/client-ecs')
 const {generateSlug}=require('random-word-slugs');
+const {Server}=require('socket.io');
 const dotenv=require('dotenv');
+const redis=require('ioredis');
 dotenv.config();
 
+const subscriber=new redis('rediss://default:AVNS_njDD1DSuPVYs6NH6DFa@valkey-2ba613df-ankushadhikari321-360d.d.aivencloud.com:16981')
+
+
 app.use(express.json());
+const io = new Server({
+  cors: {
+    origin: "*"
+  }
+});
+io.listen(9001,()=>{
+    console.log('Socket server is running on port 9001');
+})
+
+io.on('connection',(socket)=>{
+   socket.on('subscriber',projectId=>{
+    // Join room with just the project ID to match Redis forwarding
+    socket.join(projectId)
+    socket.emit('message',`Subscribed to logs:${projectId}`)
+    console.log(`Socket joined room: ${projectId}`);
+   })
+
+})
 
 app.get('/',(req,res)=>{
     res.json({message:"Api server running"});
@@ -22,19 +45,17 @@ const ecsclient=new ECSClient({
 })
 
 const CONFIG={
-    CLUSTER:process.env.ECS_CLUSTER_NAME,
-    TASK:process.env.ECS_TASK_DEFINITION
+    CLUSTER: process.env.ECS_CLUSTER_NAME || 'builder-server-vercel',
+    TASK: process.env.ECS_TASK_DEFINITION || 'builder-task:4'
 }
 
-app.post('/project',async(req,res)=>{
+app.post('/build',async(req,res)=>{
     try {
-        const {giturl,slug}=req.body;
-        
-        if (!giturl) {
-            return res.status(400).json({error: 'giturl is required'});
+        const {gitUrl, projectId} = req.body;
+        if (!gitUrl || !projectId) {
+            return res.status(400).json({error: 'gitUrl and projectId are required'});
         }
-        
-        const projectslug= slug?slug:generateSlug(2);
+        const projectslug = projectId;
 
     const command=new RunTaskCommand({
         cluster:CONFIG.CLUSTER,
@@ -55,7 +76,7 @@ app.post('/project',async(req,res)=>{
                     environment:[
                         {   
                             name:'GIT_REPO_URL',
-                            value:giturl
+                            value:gitUrl
                         },
                         {
                             name:'PROJECT_ID',
@@ -85,16 +106,28 @@ app.post('/project',async(req,res)=>{
 
     await ecsclient.send(command);
 
-    res.json({message:'Project creation initiated',projectId:projectslug});
+    res.json({message:'Build initiated',projectId:projectslug});
     
     } catch (error) {
         console.error('Error creating project:', error);
-        res.status(500).json({error: 'Failed to initiate project creation'});
+        res.status(500).json({error: 'Failed to initiate build'});
     }
 })
 
+async function initredissubscriber(){
+    subscriber.psubscribe('Logs:*');
+    subscriber.on('pmessage',(pattern,channel,message)=>{
+        console.log(`Received message on ${channel}: ${message}`);
+        const roomName = channel.split(':')[1];
+        console.log(`Forwarding to room: ${roomName}`);
+        console.log(`Connected sockets in room ${roomName}:`, io.sockets.adapter.rooms.get(roomName)?.size || 0);
+        io.to(roomName).emit('message',message);
+        console.log(`Message emitted to room ${roomName}`);
+    })
 
+}
 
+initredissubscriber();
 
 
 app.listen(9000,()=>{

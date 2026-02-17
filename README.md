@@ -111,25 +111,33 @@ git clone <your-repo-url>
 cd vercel-clone
 ```
 
-#### 2. Set Up S3 Reverse Proxy
+#### 2. Set Up API Server
 ```bash
-cd s3-reverse-proxy
+cd api-server
+npm install
+# Create .env file with required AWS credentials
+npm run dev
+```
+
+#### 3. Set Up S3 Reverse Proxy
+```bash
+cd ../s3-reverse-proxy
 npm install
 npm run dev
 ```
 
-#### 3. Configure Build Server
+#### 4. Configure Build Server
 ```bash
 cd ../build-server
 npm install
 ```
 
-#### 4. Build Docker Image
+#### 5. Build Docker Image
 ```bash
 docker build -t vercel-build-server .
 ```
 
-#### 5. Configure Local DNS (for testing)
+#### 6. Configure Local DNS (for testing)
 Add to your system's hosts file:
 - **Windows**: `C:\Windows\System32\drivers\etc\hosts`
 - **macOS/Linux**: `/etc/hosts`
@@ -145,8 +153,50 @@ Add to your system's hosts file:
 
 ### Deploying a Project
 
-1. **Prepare your React/Vite project** on GitHub
-2. **Run the build server** with your project:
+#### Option 1: Using API Server (Recommended)
+
+1. **Ensure all services are running**:
+   - API Server (port 9000)
+   - S3 Reverse Proxy (port 8000)
+
+2. **Send deployment request**:
+```bash
+curl -X POST http://localhost:9000/project \
+  -H "Content-Type: application/json" \
+  -d '{
+    "giturl": "https://github.com/vercel/next.js.git",
+    "slug": "my-awesome-project"
+  }'
+```
+
+Or use **Postman**:
+- **Method**: POST
+- **URL**: `http://localhost:9000/project`
+- **Headers**: `Content-Type: application/json`
+- **Body (raw JSON)**:
+```json
+{
+  "giturl": "https://github.com/vercel/next.js.git",
+  "slug": "my-awesome-project"
+}
+```
+
+3. **API Response**:
+```json
+{
+  "message": "Project creation initiated",
+  "projectId": "my-awesome-project"
+}
+```
+
+4. **Access your deployed app**:
+```
+http://my-awesome-project.localhost:8000
+```
+
+#### Option 2: Direct Docker Run (Manual)
+
+1. **Run the build server** directly with Docker:
 ```bash
 docker run -e PROJECT_ID=your-unique-id \
            -e GIT_REPO_URL=https://github.com/user/repo.git \
@@ -156,7 +206,7 @@ docker run -e PROJECT_ID=your-unique-id \
            vercel-build-server
 ```
 
-3. **Access your deployed app**:
+2. **Access your deployed app**:
 ```bash
 http://your-unique-id.localhost:8000
 ```

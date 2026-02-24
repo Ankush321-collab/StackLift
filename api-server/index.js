@@ -4,9 +4,12 @@ const { generateSlug } = require('random-word-slugs')
 const { ECSClient, RunTaskCommand } = require('@aws-sdk/client-ecs')
 const { Server } = require('socket.io')
 const Redis = require('ioredis')
+const { PrismaClient } = require('@prisma/client')
+const {z}=require('zod')
 
 const app = express()
 const PORT = 9000
+const prisma = new PrismaClient()
 
 const subscriber = new Redis('rediss://default:AVNS_njDD1DSuPVYs6NH6DFa@valkey-2ba613df-ankushadhikari321-360d.d.aivencloud.com:16981', {
     enableReadyCheck: false,
@@ -64,13 +67,49 @@ const config = {
     TASK: process.env.ECS_TASK_DEFINITION || 'builder-task:5'
 }
 
-app.post('/project', async (req, res) => {
-    try {
-        const { gitURL, slug } = req.body
-        if (!gitURL) {
-            return res.status(400).json({ error: 'gitURL is required' })
+app.post('/project',async(req,res)=>{
+    const schema=z.object({
+        name:z.string(),
+        gitURL:z.string()
+    })
+    const result = schema.safeParse(req.body)
+    if(!result.success){
+        return res.status(400).json({error:result.error.flatten()})
+    }
+    const {name,gitURL}=result.data
+    const deploymnent=await prisma.project.create({
+        data:{
+            name,
+            gitURL:gitURL,  
+            subdomain:generateSlug()
         }
-        const projectSlug = slug ? slug : generateSlug()
+    })
+    res.json({status:'success',data:deploymnent})           
+
+    
+
+
+})
+
+app.post('/deploy', async (req, res) => {
+    try {
+        const { projectId} = req.body
+        if (!projectId) {
+            return res.status(400).json({ error: 'projectId is required' })
+        }
+        const project = await prisma.project.findUnique({
+            where: { id: projectId }
+        })
+        if (!project) {
+            return res.status(404).json({ error: 'Project not found' })
+        }
+        const deployment=await prisma.deployment.create({
+            data:{
+                projectId:project.id,   
+                status:'queued'
+            }
+        })
+        const projectSlug = project.subdomain       
 
         const command = new RunTaskCommand({
             cluster: config.CLUSTER,
@@ -89,12 +128,13 @@ app.post('/project', async (req, res) => {
                     {
                         name: 'builder-image',
                         environment: [
-                            { name: 'GIT_REPO_URL', value: gitURL },
-                            { name: 'PROJECT_ID', value: projectSlug },
+                            { name: 'GIT_REPO_URL', value: project.gitURL },
+                            { name: 'PROJECT_ID', value: projectId},
                             { name: 'AWS_REGION', value: process.env.AWS_REGION },
                             { name: 'AWS_ACCESS_KEY_ID', value: process.env.AWS_ACCESS_KEY_ID },
                             { name: 'AWS_SECRET_ACCESS_KEY', value: process.env.AWS_SECRET_ACCESS_KEY },
-                            { name: 'AWS_S3_BUCKET_NAME', value: process.env.AWS_S3_BUCKET_NAME }
+                            { name: 'AWS_S3_BUCKET_NAME', value: process.env.AWS_S3_BUCKET_NAME },
+                            {name:"DEPLOYMENT", value:deployment.id}
                         ]
                     }
                 ]

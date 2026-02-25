@@ -5,17 +5,16 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  
 }
 
 enum deploymentstatus{
-  Not_started
+  queued
   pending
   building
   deployed
@@ -37,7 +36,7 @@ model deployment{
   id String @id @default(uuid())
   projectId String
   project project @relation(fields: [projectId], references: [id])
-  status deploymentstatus @default(Not_started)
+  status deploymentstatus @default(queued)
   logs String[]
 createdAt DateTime @default(now())
 updatedAt DateTime @updatedAt

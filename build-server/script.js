@@ -3,37 +3,17 @@ const path = require('path');
 const fs = require('fs');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const mime = require('mime-types');
-const redis=require('ioredis');
+const {Kafka}=require('kafkajs')
 
 console.log('🚀 Starting build-server script');
-console.log('📡 Initializing Redis connection...');
+console.log('📡 Initializing Kafka connection...');
 
-const publisher=new redis('rediss://default:AVNS_njDD1DSuPVYs6NH6DFa@valkey-2ba613df-ankushadhikari321-360d.d.aivencloud.com:16981', {
-    retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
-        console.log(`🔄 Redis retry attempt ${times}, waiting ${delay}ms`);
-        return delay;
-    }
-})
 
-console.log('Redis client created, status:', publisher.status);
 
-// Handle Redis connection events
-publisher.on('connect', () => {
-    console.log('✅ Redis publisher connecting...');
-});
 
-publisher.on('ready', () => {
-    console.log('✅ Redis publisher ready');
-});
 
-publisher.on('error', (err) => {
-    console.error('❌ Redis publisher error:', err.message);
-});
 
-publisher.on('close', () => {
-    console.log('⚠️  Redis publisher connection closed');
-});
+
 
 const s3Client = new S3Client({
     region: process.env.AWS_REGION || "ap-south-2",
@@ -44,6 +24,36 @@ const s3Client = new S3Client({
 });
 
 const PROJECT_ID = process.env.PROJECT_ID;
+const deploymentid=process.env.DEPLOYMENT_ID;
+
+// Read Kafka SSL certificates from env vars (Docker/ECS) or files (local)
+const getKafkaSSLConfig = () => {
+    if (process.env.KAFKA_SSL_KEY && process.env.KAFKA_SSL_CERT && process.env.KAFKA_SSL_CA) {
+        console.log('📜 Using Kafka certificates from environment variables');
+        return {
+            rejectUnauthorized: true,
+            key: Buffer.from(process.env.KAFKA_SSL_KEY, 'base64'),
+            cert: Buffer.from(process.env.KAFKA_SSL_CERT, 'base64'),
+            ca: [Buffer.from(process.env.KAFKA_SSL_CA, 'base64')]
+        };
+    } else {
+        console.log('📜 Using Kafka certificates from files');
+        return {
+            rejectUnauthorized: true,
+            key: fs.readFileSync(path.join(__dirname, 'service.key')),
+            cert: fs.readFileSync(path.join(__dirname, 'service.cert')),
+            ca: [fs.readFileSync(path.join(__dirname, 'ca.pem'))]
+        };
+    }
+};
+
+const kafka = new Kafka({
+    clientId: `docker-builder-server-${deploymentid}`,
+    brokers: ['kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com:16982'],
+    ssl: getKafkaSSLConfig()
+})
+
+const publisher = kafka.producer();
 
 // Validate PROJECT_ID
 if (!PROJECT_ID) {
@@ -53,40 +63,30 @@ if (!PROJECT_ID) {
 
 async function publishlog(log){
     try {
-        const result = await publisher.publish(`Logs:${PROJECT_ID}`, JSON.stringify({message: log, timestamp: new Date().toISOString()}));
-        console.log(`📤 Published log to Logs:${PROJECT_ID} - Subscribers: ${result}`, log);
+        await publisher.send({
+            topic: 'container-logs',
+            messages: [{
+                value: JSON.stringify({message: log, timestamp: new Date().toISOString()})
+            }]
+        });
+        console.log(`📤 Published log to Logs:${PROJECT_ID}`, log);
     } catch (err) {
-        console.error('❌ Redis publish error:', err.message);
+        console.error('❌ Kafka publish error:', err.message);
     }
 }
 
 async function init() {
     console.log('Executing script.js');
     console.log('PROJECT_ID:', PROJECT_ID);
-    console.log('Waiting for Redis connection...');
+    console.log('Waiting for Kafka connection...');
     
-    // Wait for Redis to be ready with timeout
-    const redisReady = await new Promise((resolve) => {
-        if (publisher.status === 'ready') {
-            console.log('Redis already connected!');
-            resolve(true);
-        } else {
-            const timeout = setTimeout(() => {
-                console.error('❌ Redis connection timeout after 10 seconds');
-                resolve(false);
-            }, 10000); // 10 second timeout
-            
-            publisher.once('ready', () => {
-                clearTimeout(timeout);
-                console.log('✅ Redis connected successfully!');
-                resolve(true);
-            });
-        }
-    });
-    
-    if (!redisReady) {
-        console.error('❌ FATAL: Could not connect to Redis. Exiting...');
-        console.error('Redis status:', publisher.status);
+    // Connect Kafka producer
+    try {
+        await publisher.connect();
+        console.log('✅ Kafka producer connected successfully!');
+    } catch (err) {
+        console.error('❌ FATAL: Could not connect to Kafka. Exiting...');
+        console.error('Kafka error:', err.message);
         process.exit(1);
     }
     
@@ -121,7 +121,7 @@ export default defineConfig({
 
     p.on('close', async function () {
         console.log('Build Complete');
-        await publishlog('Build Completed by redis-data abse');
+        await publishlog('Build Completed');
         const distFolderPath = path.join(__dirname, 'output', 'dist');
         const distFolderContents = fs.readdirSync(distFolderPath, { recursive: true });
        
@@ -144,9 +144,10 @@ export default defineConfig({
             console.log('uploaded', filePath);
             await publishlog(`Uploaded: ${file}`);
         }
-        console.log('Done...');
+        console.log('Done... everthing uploaded successfully');
         await publishlog('Build Completed...');
-        publisher.disconnect();
+        await publisher.disconnect();
+        process.exit(0);
     });
 
 }

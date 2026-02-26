@@ -4,13 +4,14 @@ const { generateSlug } = require('random-word-slugs')
 const { ECSClient, RunTaskCommand } = require('@aws-sdk/client-ecs')
 const { Server } = require('socket.io')
 const fs=require('fs')
+const path=require('path')
 
 const { PrismaClient, deploymentstatus } = require('./generated/prisma/index.js')
 const { PrismaPg } = require('@prisma/adapter-pg')
 const pg = require('pg')
 const {z}=require('zod')
 const {createClient} = require('@clickhouse/client')
-const {Kafka}=require('kafkajs')
+const Kafka=require('node-rdkafka')
 const {v4:uuidv4}=require('uuid')
 
 const app = express()
@@ -38,24 +39,28 @@ if(clkient) {
     
 }
 
+console.log('📡 Initializing Kafka connection for api-server...');
+console.log('🔍 Certificate paths:');
+console.log('  - Key:', path.join(__dirname, 'service.key'));
+console.log('  - Cert:', path.join(__dirname, 'service.cert'));
+console.log('  - CA:', path.join(__dirname, 'kafka.pem'));
 
-const kafka=new Kafka({
-    clientId:'api-server',
-    brokers:['kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com:16982'],   
-    ssl:{
-        rejectUnauthorized:true,
-        key:fs.readFileSync('./service.key'),
-        cert:fs.readFileSync('./service.cert'),
-        ca:[fs.readFileSync('./kafka.pem')]
-    }
-})
+const kafkaConfig = {
+    'metadata.broker.list': 'kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com:16982',
+    'group.id': 'api-server-logs-consumer',
+    'security.protocol': 'ssl',
+    'ssl.key.location': path.join(__dirname, 'service.key'),
+    'ssl.certificate.location': path.join(__dirname, 'service.cert'),
+    'ssl.ca.location': path.join(__dirname, 'kafka.pem')
+};
 
-if(kafka) {
-    console.error('connected to Kafka');
+const stream = Kafka.createReadStream(
+    kafkaConfig,
+    { 'auto.offset.reset': 'earliest' },
+    { topics: ['container-logs'] }
+);
 
-}
-
-const consumer=kafka.consumer({groupId:'api-server-logs-consumer'})
+console.log('✅ Kafka consumer stream initialized');
 const io = new Server({ cors: '*' })
 
 io.on('connection', socket => {
@@ -131,11 +136,6 @@ app.post('/deploy', async (req, res) => {
         })
         const projectSlug = project.subdomain
         
-        // Read Kafka certificates and encode as base64 for ECS task
-        const kafkaSSLKey = fs.readFileSync('./service.key', 'utf8').toString('base64')
-        const kafkaSSLCert = fs.readFileSync('./service.cert', 'utf8').toString('base64')
-        const kafkaSSLCA = fs.readFileSync('./kafka.pem', 'utf8').toString('base64')
-
         const command = new RunTaskCommand({
             cluster: config.CLUSTER,
             taskDefinition: config.TASK,
@@ -159,10 +159,7 @@ app.post('/deploy', async (req, res) => {
                             { name: 'AWS_ACCESS_KEY_ID', value: process.env.AWS_ACCESS_KEY_ID },
                             { name: 'AWS_SECRET_ACCESS_KEY', value: process.env.AWS_SECRET_ACCESS_KEY },
                             { name: 'AWS_S3_BUCKET_NAME', value: process.env.AWS_S3_BUCKET_NAME },
-                            { name: 'DEPLOYMENT_ID', value: deployment.id },
-                            { name: 'KAFKA_SSL_KEY', value: kafkaSSLKey },
-                            { name: 'KAFKA_SSL_CERT', value: kafkaSSLCert },
-                            { name: 'KAFKA_SSL_CA', value: kafkaSSLCA }
+                            { name: 'DEPLOYMENT_ID', value: deployment.id }
                         ]
                     }
                 ]
@@ -179,41 +176,65 @@ app.post('/deploy', async (req, res) => {
     }
 })
 
-async function initKafkaConsumer(){
+app.get('/logs/:id', async (req, res) => {
+  const { id } = req.params
+
+  try {
+    const result = await clkient.query({
+      query: `
+        SELECT event_id, deployment_id, log, timestamp
+        FROM log_events
+        WHERE deployment_id = {deployment_id:String}
+        ORDER BY timestamp ASC
+      `,
+      query_params: {
+        deployment_id: id
+      },
+      format: 'JSONEachRow'
+    })
+
+    const data = await result.json()
+
+    res.json({ status: 'success', data })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ status: 'error', message: 'Failed to fetch logs' })
+  }
+})
+
+// Set up Kafka consumer stream
+stream.on('data', async (message) => {
     try {
-        await consumer.connect()
-        await consumer.subscribe({topic:'project-deployed'})
-        await consumer.run({
-            eachBatch:async function({batch,heartbeat,commitOffsetsIfNecessary,resolveOffset}){
-                const messages=batch.messages
-                console.log(`Received ${messages.length} messages from Kafka`)
-
-                for(const message of messages){
-                    const stringmessage=message.value.toString()
-                    const {projectId, deploymentId, logs}=JSON.parse(stringmessage)
-                    
-                    await clkient.insert({
-                        table:'log_events',
-                        values: [{
-                            event_id: uuidv4(),
-                            deployment_id: deploymentId,
-                            logs: logs
-                        }]
-                    })
-                    
-                    resolveOffset(message.offset)
-                    commitOffsetsIfNecessary(message.offset)
-                    await heartbeat()
-                }
-            }
-        })
-    } catch(err){
-        console.warn('⚠️ Kafka consumer warning:', err.message)
-        console.warn('The "project-deployed" topic may not exist yet. Topic will be created when the build-server publishes.')
+        console.log('📨 Received message from Kafka');
+        const stringMessage = message.value.toString();
+        const { projectId, deploymentId, logs, timestamp } = JSON.parse(stringMessage);
+        
+        await clkient.insert({
+            table: 'log_events',
+            values: [{
+                event_id: uuidv4(),
+                deployment_id: deploymentId,
+                log: logs
+            }],
+            format: 'JSONEachRow'
+        });
+        
+        console.log(`✅ Logged to ClickHouse for deployment: ${deploymentId}`);
+        
+        // Emit to socket.io for real-time updates
+        io.to(deploymentId).emit('message', `log:${logs}`);
+    } catch (err) {
+        console.error('❌ Error processing Kafka message:', err.message);
     }
-}
+});
 
-// Initialize Kafka consumer (non-critical)
-initKafkaConsumer().catch(() => {})
+stream.on('error', (err) => {
+    console.warn('⚠️ Kafka consumer warning:', err.message);
+    console.warn('The "container-logs" topic may not exist yet.');
+});
+
+stream.consumer.on('ready', () => {
+    console.log('✅ Kafka consumer connected and ready!');
+});
 
 app.listen(PORT, () => console.log(`API Server Running..${PORT}`))

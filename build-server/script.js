@@ -30,11 +30,26 @@ const deploymentid=process.env.DEPLOYMENT_ID;
 const getKafkaSSLConfig = () => {
     if (process.env.KAFKA_SSL_KEY && process.env.KAFKA_SSL_CERT && process.env.KAFKA_SSL_CA) {
         console.log('📜 Using Kafka certificates from environment variables');
+        
+        // Decode and normalize certificates
+        let key = Buffer.from(process.env.KAFKA_SSL_KEY, 'base64').toString('utf-8');
+        let cert = Buffer.from(process.env.KAFKA_SSL_CERT, 'base64').toString('utf-8');
+        let ca = Buffer.from(process.env.KAFKA_SSL_CA, 'base64').toString('utf-8');
+        
+        // Replace escaped newlines with actual newlines
+        key = key.replace(/\\n/g, '\n');
+        cert = cert.replace(/\\n/g, '\n');
+        ca = ca.replace(/\\n/g, '\n');
+        
+        console.log('🔍 Certificate preview (first 50 chars):', cert.substring(0, 50));
+        console.log('🔍 Has BEGIN marker:', cert.includes('-----BEGIN'));
+        
         return {
             rejectUnauthorized: true,
-            key: Buffer.from(process.env.KAFKA_SSL_KEY, 'base64'),
-            cert: Buffer.from(process.env.KAFKA_SSL_CERT, 'base64'),
-            ca: [Buffer.from(process.env.KAFKA_SSL_CA, 'base64')]
+            key: key,
+            cert: cert,
+            ca: [ca],
+            servername: 'kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com'
         };
     } else {
         console.log('📜 Using Kafka certificates from files');
@@ -42,7 +57,8 @@ const getKafkaSSLConfig = () => {
             rejectUnauthorized: true,
             key: fs.readFileSync(path.join(__dirname, 'service.key')),
             cert: fs.readFileSync(path.join(__dirname, 'service.cert')),
-            ca: [fs.readFileSync(path.join(__dirname, 'ca.pem'))]
+            ca: [fs.readFileSync(path.join(__dirname, 'ca.pem'))],
+            servername: 'kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com'
         };
     }
 };
@@ -66,7 +82,12 @@ async function publishlog(log){
         await publisher.send({
             topic: 'container-logs',
             messages: [{
-                value: JSON.stringify({message: log, timestamp: new Date().toISOString()})
+                value: JSON.stringify({
+                    projectId: PROJECT_ID,
+                    deploymentId: deploymentid,
+                    logs: log,
+                    timestamp: new Date().toISOString()
+                })
             }]
         });
         console.log(`📤 Published log to Logs:${PROJECT_ID}`, log);

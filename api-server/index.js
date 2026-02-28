@@ -78,6 +78,67 @@ app.get('/', (req, res) => {
     res.json({ message: "API server running" })
 })
 
+// Get all projects
+app.get('/projects', async (req, res) => {
+    try {
+        const projects = await prisma.project.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: {
+                deployments: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1
+                }
+            }
+        })
+        res.json({ status: 'success', data: projects })
+    } catch (error) {
+        console.error('Error fetching projects:', error)
+        res.status(500).json({ error: 'Failed to fetch projects' })
+    }
+})
+
+// Get project details with deployments
+app.get('/project/:id', async (req, res) => {
+    try {
+        const { id } = req.params
+        const project = await prisma.project.findUnique({
+            where: { id },
+            include: {
+                deployments: {
+                    orderBy: { createdAt: 'desc' }
+                }
+            }
+        })
+        if (!project) {
+            return res.status(404).json({ error: 'Project not found' })
+        }
+        res.json({ status: 'success', data: project })
+    } catch (error) {
+        console.error('Error fetching project:', error)
+        res.status(500).json({ error: 'Failed to fetch project' })
+    }
+})
+
+// Get deployment details
+app.get('/deployment/:id', async (req, res) => {
+    try {
+        const { id } = req.params
+        const deployment = await prisma.deployment.findUnique({
+            where: { id },
+            include: {
+                project: true
+            }
+        })
+        if (!deployment) {
+            return res.status(404).json({ error: 'Deployment not found' })
+        }
+        res.json({ status: 'success', data: deployment })
+    } catch (error) {
+        console.error('Error fetching deployment:', error)
+        res.status(500).json({ error: 'Failed to fetch deployment' })
+    }
+})
+
 
 const ecsClient = new ECSClient({
     region: process.env.AWS_REGION || 'ap-south-2',

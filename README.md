@@ -2,29 +2,35 @@
 
 A simplified clone of Vercel's deployment platform that automatically builds and deploys React/Vite applications to AWS S3 with custom subdomain routing.
 
-![System Design" Diagram]![alt text](image.png)
+![System Design Diagram]![alt text](image.png)
 
 ## 🏗️ Architecture Overview
 
-This project consists of three main components that work together to provide a complete deployment solution:
+This project consists of four main components that work together to provide a complete deployment solution:
 
 ### 1. API Server (`api-server/`)
 - **Purpose**: REST API that orchestrates deployment process via AWS ECS
-- **Technology**: Node.js, Express.js, AWS ECS SDK
-- **Port**: 9000
-- **Function**: Receives deployment requests and triggers containerized builds
+- **Technology**: Node.js, Express.js, Prisma, PostgreSQL, ClickHouse, Kafka
+- **Port**: 9000 (API), 9001 (Socket.io)
+- **Function**: Manages projects, deployments, real-time logs streaming
 
 ### 2. Build Server (`build-server/`)
 - **Purpose**: Containerized build service that clones, builds, and deploys React/Vite applications
-- **Technology**: Node.js, Docker, AWS SDK
+- **Technology**: Node.js, Docker, AWS SDK, Kafka
 - **Infrastructure**: AWS ECS + AWS ECR
 - **Storage**: AWS S3
 
 ### 3. S3 Reverse Proxy (`s3-reverse-proxy/`)
 - **Purpose**: Routes subdomain requests to corresponding S3-hosted projects
-- **Technology**: Express.js, HTTP Proxy
+- **Technology**: Express.js, HTTP Proxy, Prisma
 - **Port**: 8000
 - **Function**: Serves static files from S3 buckets via custom subdomains
+
+### 4. Frontend (`frontend-nextjs/`)
+- **Purpose**: User interface for managing deployments
+- **Technology**: Next.js 14, React, TypeScript, Tailwind CSS, Shadcn UI
+- **Port**: 3000 (default Next.js port)
+- **Function**: Create projects, trigger deployments, view logs, manage projects
 
 ## 🔄 How It Works
 

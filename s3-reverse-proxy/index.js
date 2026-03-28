@@ -1,20 +1,26 @@
 require('dotenv').config()
 const express = require('express')
 const httpProxy = require('http-proxy')
-const { PrismaClient } = require('../api-server/generated/prisma')
+const { PrismaClient } = require('./generated/prisma')
 const { PrismaPg } = require('@prisma/adapter-pg')
 const pg = require('pg')
+const fs = require('fs')
+const path = require('path')
 
 const app = express()
-const PORT = 8000
+const PORT = Number(process.env.PORT) || 8000
 
 const BASE_PATH = 'https://stacklift-vercel-clone.s3.ap-south-2.amazonaws.com/__outputs'
 
 // Initialize Prisma with PostgreSQL adapter
 const connectionString = process.env.DATABASE_URL
+const caFilePath = process.env.PG_CA_PATH || path.join(__dirname, 'ca.pem')
+const caCert = fs.existsSync(caFilePath) ? fs.readFileSync(caFilePath, 'utf8') : undefined
 const pool = new pg.Pool({ 
     connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : { rejectUnauthorized: false, requestCert: true }
+    ssl: process.env.NODE_ENV === 'production'
+        ? (caCert ? { rejectUnauthorized: true, ca: caCert } : { rejectUnauthorized: true })
+        : { rejectUnauthorized: false, requestCert: true }
 })
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
@@ -84,6 +90,14 @@ proxy.on('error', (err, req, res) => {
         });
     }
 })
+app.get('/  ', (req, res) => {
+    res.send('Hello World from proxy server')
+})
+
+// Kafka setup for logging
+const { Kafka } = require('kafkajs');
+const deploymentid = process.env.DEPLOYMENT_ID || 'local-deployment';
+const PROJECT_ID = process.env.PROJECT_ID;
 
 app.listen(PORT, () => {
     console.log(`🚀 Reverse Proxy Running on Port ${PORT}`)

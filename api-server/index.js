@@ -6,7 +6,7 @@ const { Server } = require('socket.io')
 const fs=require('fs')
 const path=require('path')
 
-const { PrismaClient, deploymentstatus } = require('./generated/prisma/index.js')
+const { PrismaClient } = require('./generated/prisma/index.js')
 const { PrismaPg } = require('@prisma/adapter-pg')
 const pg = require('pg')
 const {z}=require('zod')
@@ -16,6 +16,16 @@ const {v4:uuidv4}=require('uuid')
 
 const app = express()
 const PORT = 9000
+
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*')
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200)
+    }
+    next()
+})
 
 const connectionString = process.env.DATABASE_URL
 const pool = new pg.Pool({ 
@@ -153,28 +163,41 @@ const config = {
     TASK: process.env.ECS_TASK_DEFINITION || 'builder-task:5'
 }
 
-app.post('/project',async(req,res)=>{
-    const schema=z.object({
-        name:z.string(),
-        gitURL:z.string()
-    })
-    const result = schema.safeParse(req.body)
-    if(!result.success){
-        return res.status(400).json({error:result.error.flatten()})
-    }
-    const {name,gitURL}=result.data
-    const deploymnent=await prisma.project.create({
-        data:{
-            name,
-            giturl:gitURL,
-            subdomain:generateSlug()
+app.post('/project', async (req, res) => {
+    try {
+        const schema = z.object({
+            name: z.string(),
+            gitURL: z.string()
+        })
+        const result = schema.safeParse(req.body)
+        if (!result.success) {
+            return res.status(400).json({ error: result.error.flatten() })
         }
-    })
-    res.json({status:'success',data:deploymnent})           
+        const { name, gitURL } = result.data
+        const deploymnent = await prisma.project.create({
+            data: {
+                name,
+                giturl: gitURL,
+                subdomain: generateSlug()
+            }
+        })
+        res.json({ status: 'success', data: deploymnent })
+    } catch (error) {
+        console.error('Error creating project:', error)
+        const details = process.env.NODE_ENV === 'development'
+            ? {
+                message: error?.message || String(error),
+                name: error?.name,
+                code: error?.code,
+                metadata: error?.$metadata
+            }
+            : undefined
 
-    
-
-
+        res.status(500).json({
+            error: 'Failed to create project',
+            details
+        })
+    }
 })
 
 app.post('/deploy', async (req, res) => {
@@ -192,7 +215,7 @@ app.post('/deploy', async (req, res) => {
         const deployment=await prisma.deployment.create({
             data:{
                 projectId:project.id,   
-                status: deploymentstatus.queued
+                status: 'queued'
             }
         })
         const projectSlug = project.subdomain
@@ -232,8 +255,20 @@ app.post('/deploy', async (req, res) => {
         return res.json({ status: 'queued', data: { deploymentId: deployment.id } })
 
     } catch (error) {
-        console.error('Error creating project:', error)
-        res.status(500).json({ error: 'Failed to initiate build' })
+        console.error('Error initiating deployment:', error)
+        const details = process.env.NODE_ENV === 'development'
+            ? {
+                message: error?.message || String(error),
+                name: error?.name,
+                code: error?.code,
+                metadata: error?.$metadata
+            }
+            : undefined
+
+        res.status(500).json({
+            error: 'Failed to initiate build',
+            details
+        })
     }
 })
 
@@ -297,5 +332,22 @@ stream.on('error', (err) => {
 stream.consumer.on('ready', () => {
     console.log('✅ Kafka consumer connected and ready!');
 });
+
+app.use((err, req, res, next) => {
+    console.error('Unhandled API error:', err)
+    const details = process.env.NODE_ENV === 'development'
+        ? {
+            message: err?.message || String(err),
+            name: err?.name,
+            code: err?.code,
+            metadata: err?.$metadata
+        }
+        : undefined
+
+    res.status(err.status || 500).json({
+        error: 'Internal server error',
+        details
+    })
+})
 
 app.listen(PORT, () => console.log(`API Server Running..${PORT}`))

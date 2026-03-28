@@ -1,4 +1,5 @@
 "use client";
+import { Suspense } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -20,7 +21,7 @@ import { DeploymentStatus } from "@/lib/types";
 
 const firaCode = Fira_Code({ subsets: ["latin"] });
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const urlProjectId = searchParams.get("projectId");
   const urlDeploymentId = searchParams.get("deploymentId");
@@ -151,15 +152,28 @@ export default function Home() {
     if (message.startsWith("log:")) {
       const log = message.substring(4);
       setLogs((prev) => [...prev, log]);
-      
-      // Check if deployment is complete
-      if (log.includes("Done") || log.includes("Deployment complete")) {
+
+      const normalizedLog = log.toLowerCase();
+      const isSuccessLog =
+        normalizedLog.includes("done... everthing uploaded successfully") ||
+        normalizedLog.includes("deployment complete") ||
+        normalizedLog.includes("build completed...");
+
+      const isFailureLog =
+        normalizedLog.includes("fatal:") ||
+        normalizedLog.includes("build failed") ||
+        normalizedLog.includes("deployment failed") ||
+        normalizedLog.includes("could not connect to kafka") ||
+        normalizedLog.includes("project_id environment variable is missing");
+
+      // Use explicit markers to avoid false failures from non-fatal stderr output.
+      if (isSuccessLog) {
         setDeploymentStatus(DeploymentStatus.DEPLOYED);
         setLoading(false);
-      } else if (log.includes("Error") || log.includes("Failed")) {
+      } else if (isFailureLog) {
         setDeploymentStatus(DeploymentStatus.FAILED);
         setLoading(false);
-      } else if (log.includes("Building")) {
+      } else if (normalizedLog.includes("build started") || normalizedLog.includes("building")) {
         setDeploymentStatus(DeploymentStatus.BUILDING);
       }
       
@@ -296,5 +310,13 @@ export default function Home() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<main className="flex justify-center items-center min-h-screen py-10">Loading...</main>}>
+      <HomeContent />
+    </Suspense>
   );
 }

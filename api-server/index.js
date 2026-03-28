@@ -1,5 +1,6 @@
 require('dotenv').config()
 const express = require('express')
+const http = require('http')
 const { generateSlug } = require('random-word-slugs')
 const { ECSClient, RunTaskCommand } = require('@aws-sdk/client-ecs')
 const { Server } = require('socket.io')
@@ -15,7 +16,8 @@ const { Kafka, PartitionAssigners } = require('kafkajs')
 const {v4:uuidv4}=require('uuid')
 
 const app = express()
-const PORT = 9000
+const PORT = Number(process.env.PORT) || 9000
+const server = http.createServer(app)
 
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*')
@@ -80,7 +82,12 @@ const consumer = kafka.consumer({
 })
 
 console.log('✅ Kafka consumer initialized with kafkajs');
-const io = new Server({ cors: '*' })
+const io = new Server(server, {
+    cors: {
+        origin: '*'
+    },
+    path: '/socket.io'
+})
 
 io.on('connection', socket => {
     socket.on('subscribe', channel => {
@@ -367,13 +374,7 @@ app.use((err, req, res, next) => {
     })
 })
 
-const server = app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`API Server Running..${PORT}`)
     console.log('Socket Server attached to API port')
-})
-
-io.attach(server, {
-    cors: {
-        origin: '*'
-    }
 })

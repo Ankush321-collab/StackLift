@@ -11,7 +11,7 @@ const { PrismaPg } = require('@prisma/adapter-pg')
 const pg = require('pg')
 const {z}=require('zod')
 const {createClient} = require('@clickhouse/client')
-const { Kafka } = require('kafkajs')
+const { Kafka, PartitionAssigners } = require('kafkajs')
 const {v4:uuidv4}=require('uuid')
 
 const app = express()
@@ -64,11 +64,19 @@ const kafka = new Kafka({
         cert: fs.readFileSync(path.join(__dirname, 'service.cert'), 'utf8'),
         ca: [fs.readFileSync(path.join(__dirname, 'kafka.pem'), 'utf8')],
         servername: process.env.KAFKA_SERVER_NAME || 'kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com'
+    },
+    connectionTimeout: Number(process.env.KAFKA_CONNECTION_TIMEOUT || 30000),
+    requestTimeout: Number(process.env.KAFKA_REQUEST_TIMEOUT || 30000),
+    retry: {
+        initialRetryTime: 1000,
+        retries: Number(process.env.KAFKA_RETRY_COUNT || 12),
+        maxRetryTime: 60000
     }
 })
 
 const consumer = kafka.consumer({
-    groupId: process.env.KAFKA_GROUP_ID || 'api-server-logs-consumer'
+    groupId: process.env.KAFKA_GROUP_ID || 'api-server-logs-consumer-kafkajs-v1',
+    partitionAssigners: [PartitionAssigners.roundRobin]
 })
 
 console.log('✅ Kafka consumer initialized with kafkajs');

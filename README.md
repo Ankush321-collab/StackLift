@@ -6,7 +6,9 @@ A simplified clone of Vercel's deployment platform that automatically builds and
 
 ## 🏗️ Architecture Overview
 
+
 This project consists of four main components that work together to provide a complete deployment solution:
+![alt text](image-1.png)
 
 ### 1. API Server (`api-server/`)
 - **Purpose**: REST API that orchestrates deployment process via AWS ECS

@@ -78,7 +78,10 @@ const kafka = new Kafka({
 
 const consumer = kafka.consumer({
     groupId: process.env.KAFKA_GROUP_ID || 'api-server-logs-consumer-kafkajs-v1',
-    partitionAssigners: [PartitionAssigners.roundRobin]
+    partitionAssigners: [PartitionAssigners.roundRobin],
+    sessionTimeout: Number(process.env.KAFKA_SESSION_TIMEOUT || 60000),
+    rebalanceTimeout: Number(process.env.KAFKA_REBALANCE_TIMEOUT || 120000),
+    heartbeatInterval: Number(process.env.KAFKA_HEARTBEAT_INTERVAL || 5000)
 })
 
 console.log('✅ Kafka consumer initialized with kafkajs');

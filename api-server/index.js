@@ -89,8 +89,6 @@ io.on('connection', socket => {
     })
 })
 
-io.listen(9001, () => console.log('Socket Server 9001'))
-
 app.use(express.json())
 
 app.get('/', (req, res) => {
@@ -369,4 +367,13 @@ app.use((err, req, res, next) => {
     })
 })
 
-app.listen(PORT, () => console.log(`API Server Running..${PORT}`))
+const server = app.listen(PORT, () => {
+    console.log(`API Server Running..${PORT}`)
+    console.log('Socket Server attached to API port')
+})
+
+io.attach(server, {
+    cors: {
+        origin: '*'
+    }
+})

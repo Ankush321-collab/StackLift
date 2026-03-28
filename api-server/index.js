@@ -11,7 +11,7 @@ const { PrismaPg } = require('@prisma/adapter-pg')
 const pg = require('pg')
 const {z}=require('zod')
 const {createClient} = require('@clickhouse/client')
-const Kafka=require('node-rdkafka')
+const { Kafka } = require('kafkajs')
 const {v4:uuidv4}=require('uuid')
 
 const app = express()
@@ -55,22 +55,23 @@ console.log('  - Key:', path.join(__dirname, 'service.key'));
 console.log('  - Cert:', path.join(__dirname, 'service.cert'));
 console.log('  - CA:', path.join(__dirname, 'kafka.pem'));
 
-const kafkaConfig = {
-    'metadata.broker.list': 'kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com:16982',
-    'group.id': 'api-server-logs-consumer',
-    'security.protocol': 'ssl',
-    'ssl.key.location': path.join(__dirname, 'service.key'),
-    'ssl.certificate.location': path.join(__dirname, 'service.cert'),
-    'ssl.ca.location': path.join(__dirname, 'kafka.pem')
-};
+const kafka = new Kafka({
+    clientId: 'api-server-logs-consumer',
+    brokers: [process.env.KAFKA_BROKER || 'kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com:16982'],
+    ssl: {
+        rejectUnauthorized: true,
+        key: fs.readFileSync(path.join(__dirname, 'service.key'), 'utf8'),
+        cert: fs.readFileSync(path.join(__dirname, 'service.cert'), 'utf8'),
+        ca: [fs.readFileSync(path.join(__dirname, 'kafka.pem'), 'utf8')],
+        servername: process.env.KAFKA_SERVER_NAME || 'kafka-2563b77e-ankushadhikari321-360d.f.aivencloud.com'
+    }
+})
 
-const stream = Kafka.createReadStream(
-    kafkaConfig,
-    { 'auto.offset.reset': 'earliest' },
-    { topics: ['container-logs'] }
-);
+const consumer = kafka.consumer({
+    groupId: process.env.KAFKA_GROUP_ID || 'api-server-logs-consumer'
+})
 
-console.log('✅ Kafka consumer stream initialized');
+console.log('✅ Kafka consumer initialized with kafkajs');
 const io = new Server({ cors: '*' })
 
 io.on('connection', socket => {
@@ -298,40 +299,50 @@ app.get('/logs/:id', async (req, res) => {
   }
 })
 
-// Set up Kafka consumer stream
-stream.on('data', async (message) => {
+async function startKafkaConsumer() {
     try {
-        console.log('📨 Received message from Kafka');
-        const stringMessage = message.value.toString();
-        const { projectId, deploymentId, logs, timestamp } = JSON.parse(stringMessage);
-        
-        await clkient.insert({
-            table: 'log_events',
-            values: [{
-                event_id: uuidv4(),
-                deployment_id: deploymentId,
-                log: logs
-            }],
-            format: 'JSONEachRow'
-        });
-        
-        console.log(`✅ Logged to ClickHouse for deployment: ${deploymentId}`);
-        
-        // Emit to socket.io for real-time updates
-        io.to(deploymentId).emit('message', `log:${logs}`);
+        await consumer.connect()
+        await consumer.subscribe({ topic: 'container-logs', fromBeginning: true })
+
+        await consumer.run({
+            eachMessage: async ({ message }) => {
+                try {
+                    if (!message.value) {
+                        return
+                    }
+
+                    console.log('📨 Received message from Kafka')
+                    const stringMessage = message.value.toString()
+                    const { deploymentId, logs } = JSON.parse(stringMessage)
+
+                    await clkient.insert({
+                        table: 'log_events',
+                        values: [{
+                            event_id: uuidv4(),
+                            deployment_id: deploymentId,
+                            log: logs
+                        }],
+                        format: 'JSONEachRow'
+                    })
+
+                    console.log(`✅ Logged to ClickHouse for deployment: ${deploymentId}`)
+
+                    // Emit to socket.io for real-time updates.
+                    io.to(deploymentId).emit('message', `log:${logs}`)
+                } catch (err) {
+                    console.error('❌ Error processing Kafka message:', err.message)
+                }
+            }
+        })
+
+        console.log('✅ Kafka consumer connected and ready!')
     } catch (err) {
-        console.error('❌ Error processing Kafka message:', err.message);
+        console.warn('⚠️ Kafka consumer warning:', err.message)
+        console.warn('The "container-logs" topic may not exist yet.')
     }
-});
+}
 
-stream.on('error', (err) => {
-    console.warn('⚠️ Kafka consumer warning:', err.message);
-    console.warn('The "container-logs" topic may not exist yet.');
-});
-
-stream.consumer.on('ready', () => {
-    console.log('✅ Kafka consumer connected and ready!');
-});
+startKafkaConsumer()
 
 app.use((err, req, res, next) => {
     console.error('Unhandled API error:', err)

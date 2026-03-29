@@ -2,7 +2,7 @@
 
 A simplified clone of Vercel's deployment platform that automatically builds and deploys React/Vite applications to AWS S3 with custom subdomain routing.
 
-![System Design Diagram]![alt text](image.png)
+![System Design Diagram](image.png)
 
 ## 🏗️ Architecture Overview
 

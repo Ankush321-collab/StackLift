@@ -83,9 +83,9 @@ export default function ProjectDetailClient() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p>Loading project...</p>
+        <div className="text-center glass-card rounded-2xl px-8 py-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400 mx-auto mb-4"></div>
+          <p className="text-slate-200">Loading project...</p>
         </div>
       </div>
     );
@@ -94,126 +94,138 @@ export default function ProjectDetailClient() {
   if (error || !project) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-center text-red-500">
-          <p className="text-xl mb-4">Error: {error || "Project not found"}</p>
+        <div className="text-center glass-card rounded-2xl px-8 py-6">
+          <p className="text-xl mb-4 text-red-400">Error: {error || "Project not found"}</p>
           <Link href="/projects">
-            <Button>Back to Projects</Button>
+            <Button className="bg-sky-500 text-slate-950 hover:bg-sky-400">Back to Projects</Button>
           </Link>
         </div>
       </div>
     );
   }
 
-  const previewURL = getPreviewURL(project.subdomain);
+  const previewURL = getPreviewURL(project.subdomain, project.id);
 
   return (
-    <main className="container mx-auto px-4 py-10">
-      <div className="mb-8">
-        <Link href="/projects" className="inline-flex items-center text-gray-400 hover:text-white mb-4">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Projects
-        </Link>
+    <main className="relative min-h-screen px-4 py-12">
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute left-[15%] top-10 h-56 w-56 rounded-full bg-sky-500/20 blur-[120px] animate-float" />
+        <div className="absolute right-[12%] top-32 h-64 w-64 rounded-full bg-violet-500/20 blur-[140px] animate-float" />
+      </div>
 
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">{project.name}</h1>
-            <div className="flex items-center gap-2 text-gray-400">
-              <GitBranch className="h-4 w-4" />
+      <div className="mx-auto w-full max-w-5xl">
+        <div className="mb-8 animate-fade-up">
+          <Link href="/projects" className="inline-flex items-center text-slate-400 hover:text-slate-100 mb-4">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Projects
+          </Link>
+
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Project Overview</p>
+              <h1 className="mt-3 text-4xl font-semibold text-gradient">{project.name}</h1>
+              <div className="mt-2 flex items-center gap-2 text-slate-400">
+                <GitBranch className="h-4 w-4" />
+                <a
+                  href={project.giturl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-sky-300 transition-colors"
+                >
+                  {project.giturl}
+                </a>
+              </div>
+            </div>
+            <div className="flex gap-3">
               <a
-                href={project.giturl}
+                href={previewURL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-blue-400 transition-colors"
               >
-                {project.giturl}
+                <Button variant="outline" className="border-slate-700/60 bg-slate-900/40 hover:bg-slate-800/70">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Visit Site
+                </Button>
               </a>
+              <Button
+                onClick={handleRedeploy}
+                disabled={deploying}
+                className="bg-sky-500 text-slate-950 hover:bg-sky-400"
+              >
+                {deploying ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deploying...
+                  </>
+                ) : (
+                  "Redeploy"
+                )}
+              </Button>
             </div>
           </div>
-          <div className="flex gap-3">
-            <a
-              href={previewURL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="outline">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Visit Site
-              </Button>
-            </a>
-            <Button onClick={handleRedeploy} disabled={deploying}>
-              {deploying ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deploying...
-                </>
-              ) : (
-                "Redeploy"
-              )}
-            </Button>
-          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-slate-900 rounded-lg p-6">
-          <p className="text-sm text-gray-400 mb-2">Subdomain</p>
-          <p className="font-mono">{project.subdomain}</p>
-        </div>
-        <div className="bg-slate-900 rounded-lg p-6">
-          <p className="text-sm text-gray-400 mb-2">Created</p>
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            {formatDate(project.createdAt)}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          <div className="glass-card rounded-2xl p-6">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">Subdomain</p>
+            <p className="font-mono text-slate-200">{project.subdomain}</p>
+          </div>
+          <div className="glass-card rounded-2xl p-6">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">Created</p>
+            <div className="flex items-center gap-2 text-slate-200">
+              <Clock className="h-4 w-4" />
+              {formatDate(project.createdAt)}
+            </div>
+          </div>
+          <div className="glass-card rounded-2xl p-6">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">Total Deployments</p>
+            <p className="text-2xl font-bold text-slate-100">{project.deployments.length}</p>
           </div>
         </div>
-        <div className="bg-slate-900 rounded-lg p-6">
-          <p className="text-sm text-gray-400 mb-2">Total Deployments</p>
-          <p className="text-2xl font-bold">{project.deployments.length}</p>
-        </div>
-      </div>
 
-      <div>
-        <h2 className="text-2xl font-bold mb-4">Deployment History</h2>
-        {project.deployments.length === 0 ? (
-          <div className="bg-slate-900 rounded-lg p-8 text-center">
-            <p className="text-gray-400">No deployments yet</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {project.deployments.map((deployment) => (
-              <div
-                key={deployment.id}
-                className="bg-slate-900 rounded-lg p-6 hover:bg-slate-800 transition-colors"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                          deployment.status
-                        )}`}
-                      >
-                        {deployment.status}
-                      </span>
-                      <span className="text-sm text-gray-400 font-mono">
-                        {deployment.id.substring(0, 8)}
-                      </span>
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Deployment History</h2>
+          {project.deployments.length === 0 ? (
+            <div className="glass-card rounded-2xl p-8 text-center">
+              <p className="text-slate-300">No deployments yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {project.deployments.map((deployment) => (
+                <div
+                  key={deployment.id}
+                  className="glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                            deployment.status
+                          )}`}
+                        >
+                          {deployment.status}
+                        </span>
+                        <span className="text-sm text-slate-400 font-mono">
+                          {deployment.id.substring(0, 8)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                        <Clock className="h-3 w-3" />
+                        {formatDate(deployment.createdAt)}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-400">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(deployment.createdAt)}
-                    </div>
+                    <Link href={`/?deploymentId=${deployment.id}&projectId=${project.id}`}>
+                      <Button variant="outline" size="sm" className="border-slate-700/60 bg-slate-900/40 hover:bg-slate-800/70">
+                        View Logs
+                      </Button>
+                    </Link>
                   </div>
-                  <Link href={`/?deploymentId=${deployment.id}&projectId=${project.id}`}>
-                    <Button variant="outline" size="sm">
-                      View Logs
-                    </Button>
-                  </Link>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

@@ -59,7 +59,7 @@ function HomeContent() {
           setURL(project.giturl);
           setDeploymentId(deployment.id);
           setDeploymentStatus(deployment.status);
-          setDeployPreviewURL(getPreviewURL(project.subdomain));
+          setDeployPreviewURL(getPreviewURL(project.subdomain, project.id));
 
           // Load existing logs
           try {
@@ -118,7 +118,7 @@ function HomeContent() {
         const project = projectResponse.data;
         setProjectId(project.id);
         
-        const previewURL = getPreviewURL(project.subdomain);
+        const previewURL = getPreviewURL(project.subdomain, project.id);
         setDeployPreviewURL(previewURL);
 
         // Step 2: Deploy the project
@@ -202,111 +202,136 @@ function HomeContent() {
   }, [handleSocketIncommingMessage]);
 
   return (
-    <main className="flex justify-center items-center min-h-screen py-10">
-      <div className="w-[600px]">
-        <div className="mb-6 flex justify-between items-start">
+    <main className="relative min-h-screen overflow-hidden px-4 py-12">
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute left-1/2 top-[-180px] h-[360px] w-[360px] -translate-x-1/2 rounded-full bg-sky-500/20 blur-[140px] animate-float" />
+        <div className="absolute right-[-120px] top-24 h-[320px] w-[320px] rounded-full bg-pink-500/20 blur-[150px] animate-float" />
+        <div className="absolute left-[-120px] bottom-16 h-[280px] w-[280px] rounded-full bg-violet-500/20 blur-[140px] animate-float" />
+        <div className="absolute inset-0 bg-grid opacity-40" />
+      </div>
+
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 animate-fade-up">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Deploy Your Project</h1>
-            <p className="text-gray-400">
-              Deploy your GitHub repository to the cloud in seconds
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Stacklift Deploy</p>
+            <h1 className="mt-3 text-4xl font-semibold text-gradient sm:text-5xl">
+              Deploy your frontend in minutes
+            </h1>
+            <p className="mt-3 text-base text-slate-300">
+              Push a GitHub repo and get a production-ready build with instant preview links and logs.
             </p>
           </div>
           <Link href="/projects">
-            <Button variant="outline" size="sm">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-slate-700/60 bg-slate-900/40 hover:bg-slate-800/60"
+            >
               <List className="mr-2 h-4 w-4" />
               Projects
             </Button>
           </Link>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Project Name
-            </label>
-            <Input
-              disabled={loading}
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              type="text"
-              placeholder="my-awesome-project"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              GitHub Repository URL
-            </label>
-            <span className="flex justify-start items-center gap-2">
-              <Github className="text-2xl flex-shrink-0" />
+        <section className="glass-card rounded-2xl p-6 shadow-2xl animate-fade-up">
+          <div className="grid gap-4">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 mb-2">
+                Project Name
+              </label>
               <Input
                 disabled={loading}
-                value={repoURL}
-                onChange={(e) => setURL(e.target.value)}
-                type="url"
-                placeholder="https://github.com/username/repo"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                type="text"
+                placeholder="my-awesome-project"
+                className="bg-slate-950/60 border-slate-700/60 focus-visible:ring-sky-500/40"
               />
-            </span>
-            {repoURL && !isValidURL[0] && (
-              <p className="text-red-500 text-sm mt-1">{isValidURL[1]}</p>
-            )}
-          </div>
+            </div>
 
-          <Button
-            onClick={handleClickDeploy}
-            disabled={!isValidInput || loading}
-            className="w-full"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {deploymentStatus === DeploymentStatus.QUEUED && "Queued..."}
-                {deploymentStatus === DeploymentStatus.BUILDING && "Building..."}
-                {deploymentStatus === DeploymentStatus.PENDING && "Pending..."}
-                {!deploymentStatus && "Deploying..."}
-              </>
-            ) : (
-              "Deploy"
-            )}
-          </Button>
-        </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 mb-2">
+                GitHub Repository URL
+              </label>
+              <span className="flex items-center gap-3">
+                <Github className="text-xl text-slate-400" />
+                <Input
+                  disabled={loading}
+                  value={repoURL}
+                  onChange={(e) => setURL(e.target.value)}
+                  type="url"
+                  placeholder="https://github.com/username/repo"
+                  className="bg-slate-950/60 border-slate-700/60 focus-visible:ring-sky-500/40"
+                />
+              </span>
+              {repoURL && !isValidURL[0] && (
+                <p className="text-red-400 text-sm mt-2">{isValidURL[1]}</p>
+              )}
+            </div>
+
+            <Button
+              onClick={handleClickDeploy}
+              disabled={!isValidInput || loading}
+              className="w-full bg-sky-500/90 text-slate-950 hover:bg-sky-400"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {deploymentStatus === DeploymentStatus.QUEUED && "Queued..."}
+                  {deploymentStatus === DeploymentStatus.BUILDING && "Building..."}
+                  {deploymentStatus === DeploymentStatus.PENDING && "Pending..."}
+                  {!deploymentStatus && "Deploying..."}
+                </>
+              ) : (
+                "Deploy"
+              )}
+            </Button>
+          </div>
+        </section>
 
         {deployPreviewURL && (
-          <div className="mt-6 bg-slate-900 py-4 px-4 rounded-lg">
-            <p className="text-sm text-gray-400 mb-2">Preview URL</p>
+          <section className="glass-card rounded-2xl p-5 animate-fade-up">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Preview URL</p>
             <a
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sky-400 bg-sky-950 px-3 py-2 rounded-lg inline-block hover:bg-sky-900 transition-colors"
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-900/70 px-4 py-3 text-sky-300 transition-colors hover:bg-slate-800/70"
               href={deployPreviewURL}
             >
               {deployPreviewURL}
             </a>
             {deploymentStatus === DeploymentStatus.DEPLOYED && (
-              <p className="text-green-500 text-sm mt-2">✅ Deployment successful!</p>
+              <p className="text-emerald-400 text-sm mt-3">Deployment successful!</p>
             )}
             {deploymentStatus === DeploymentStatus.FAILED && (
-              <p className="text-red-500 text-sm mt-2">❌ Deployment failed</p>
+              <p className="text-red-400 text-sm mt-3">Deployment failed. Check logs below.</p>
             )}
-          </div>
+          </section>
         )}
 
         {logs.length > 0 && (
-          <div className="mt-6">
-            <p className="text-sm font-medium mb-2">Deployment Logs</p>
-            <div
-              className={`${firaCode.className} text-sm text-green-500 logs-container border-green-500 border-2 rounded-lg p-4 h-[300px] overflow-y-auto bg-black`}
-            >
-              <pre className="flex flex-col gap-1">
-                {logs.map((log, i) => (
-                  <code
-                    ref={logs.length - 1 === i ? logContainerRef : undefined}
-                    key={i}
-                  >{`> ${log}`}</code>
-                ))}
-              </pre>
+          <section className="animate-fade-up">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Deployment Logs</p>
+              <span className="text-xs text-emerald-300/80">Live stream</span>
             </div>
-          </div>
+            <div className="relative">
+              <div className="absolute inset-x-0 top-0 h-10 rounded-2xl bg-gradient-to-b from-emerald-500/20 to-transparent pointer-events-none" />
+              <div
+                className={`${firaCode.className} text-sm text-emerald-200 logs-container border border-emerald-500/40 rounded-2xl p-4 h-[340px] overflow-y-auto bg-slate-950/80 shadow-[0_20px_60px_rgba(15,23,42,0.6)]`}
+              >
+                <pre className="flex flex-col gap-1">
+                  {logs.map((log, i) => (
+                    <code
+                      ref={logs.length - 1 === i ? logContainerRef : undefined}
+                      key={i}
+                      className="animate-fade-in"
+                    >{`> ${log}`}</code>
+                  ))}
+                </pre>
+              </div>
+            </div>
+          </section>
         )}
       </div>
     </main>

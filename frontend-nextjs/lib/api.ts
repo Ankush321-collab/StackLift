@@ -56,9 +56,29 @@ export const getDeployment = async (deploymentId: string): Promise<GetDeployment
 };
 
 // Get preview URL for a project
-export const getPreviewURL = (subdomain: string): string => {
+export const getPreviewURL = (subdomain: string, projectId?: string): string => {
+  // Prefer direct deploy output path when project ID is available.
+  if (projectId) {
+    const deployedBasePath =
+      process.env.NEXT_PUBLIC_DEPLOYED_BASE_PATH ||
+      "https://stacklift-vercel-clone.s3.ap-south-2.amazonaws.com/__outputs";
+
+    return `${deployedBasePath.replace(/\/$/, "")}/${projectId}/index.html`;
+  }
+
   const previewBaseUrl = process.env.NEXT_PUBLIC_PREVIEW_URL || "http://localhost:8000";
-  return `${previewBaseUrl.replace("localhost", `${subdomain}.localhost`)}`;
+
+  if (previewBaseUrl.includes("localhost")) {
+    return previewBaseUrl.replace("localhost", `${subdomain}.localhost`);
+  }
+
+  try {
+    const parsedUrl = new URL(previewBaseUrl);
+    parsedUrl.hostname = `${subdomain}.${parsedUrl.hostname}`;
+    return parsedUrl.toString().replace(/\/$/, "");
+  } catch {
+    return previewBaseUrl;
+  }
 };
 
 export const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:9001";

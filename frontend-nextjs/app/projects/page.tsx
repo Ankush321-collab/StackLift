@@ -57,9 +57,9 @@ export default function ProjectsPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p>Loading projects...</p>
+        <div className="text-center glass-card rounded-2xl px-8 py-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400 mx-auto mb-4"></div>
+          <p className="text-slate-200">Loading projects...</p>
         </div>
       </div>
     );
@@ -68,47 +68,56 @@ export default function ProjectsPage() {
   if (error) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-center text-red-500">
-          <p className="text-xl mb-4">Error: {error}</p>
-          <Button onClick={() => window.location.reload()}>Retry</Button>
+        <div className="text-center glass-card rounded-2xl px-8 py-6">
+          <p className="text-xl mb-4 text-red-400">Error: {error}</p>
+          <Button onClick={() => window.location.reload()} className="bg-sky-500 text-slate-950 hover:bg-sky-400">
+            Retry
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <main className="container mx-auto px-4 py-10">
-      <div className="mb-8">
-        <div className="flex justify-between items-center">
+    <main className="relative min-h-screen px-4 py-12">
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute left-[10%] top-12 h-52 w-52 rounded-full bg-sky-500/20 blur-[120px] animate-float" />
+        <div className="absolute right-[10%] top-40 h-64 w-64 rounded-full bg-fuchsia-500/20 blur-[140px] animate-float" />
+      </div>
+
+      <div className="mx-auto w-full max-w-5xl">
+        <div className="mb-10 flex flex-wrap items-center justify-between gap-4 animate-fade-up">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Your Projects</h1>
-            <p className="text-gray-400">
-              Manage and deploy your GitHub repositories
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Project Library</p>
+            <h1 className="mt-3 text-4xl font-semibold text-gradient">Your Projects</h1>
+            <p className="mt-2 text-slate-300">
+              Manage deployments, monitor status, and jump straight to previews.
             </p>
           </div>
           <Link href="/">
-            <Button>Deploy New Project</Button>
+            <Button className="bg-sky-500 text-slate-950 hover:bg-sky-400">Deploy New Project</Button>
           </Link>
         </div>
-      </div>
 
       {projects.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-xl text-gray-400 mb-4">No projects yet</p>
-          <Link href="/">
-            <Button>Create Your First Project</Button>
-          </Link>
+          <div className="glass-card rounded-2xl px-10 py-12 inline-block">
+            <p className="text-xl text-slate-300 mb-4">No projects yet</p>
+            <Link href="/">
+              <Button className="bg-sky-500 text-slate-950 hover:bg-sky-400">Create Your First Project</Button>
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="grid gap-6">
           {projects.map((project) => {
             const latestDeployment = project.deployments[0];
-            const previewURL = getPreviewURL(project.subdomain);
+            const previewURL = getPreviewURL(project.subdomain, project.id);
 
             return (
               <div
                 key={project.id}
-                className="bg-slate-900 rounded-lg p-6 hover:bg-slate-800 transition-colors"
+                className="glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_80px_rgba(15,23,42,0.6)]"
               >
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -129,7 +138,7 @@ export default function ProjectsPage() {
                     href={previewURL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sky-400 hover:text-sky-300 transition-colors"
+                    className="flex items-center gap-2 text-sky-300 hover:text-sky-200 transition-colors"
                   >
                     <ExternalLink className="h-4 w-4" />
                     Visit
@@ -169,12 +178,12 @@ export default function ProjectsPage() {
 
                 <div className="mt-4 flex gap-3">
                   <Link href={`/project/${project.id}`}>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="border-slate-700/60 bg-slate-900/40 hover:bg-slate-800/70">
                       View Details
                     </Button>
                   </Link>
                   <Link href={`/?projectId=${project.id}`}>
-                    <Button size="sm">Redeploy</Button>
+                    <Button size="sm" className="bg-sky-500 text-slate-950 hover:bg-sky-400">Redeploy</Button>
                   </Link>
                 </div>
               </div>
@@ -182,6 +191,7 @@ export default function ProjectsPage() {
           })}
         </div>
       )}
+      </div>
     </main>
   );
 }

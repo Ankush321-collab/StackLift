@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 220 28% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 20% 10%;
+    --card-foreground: 210 40% 98%;
+ 
+    --popover: 220 20% 10%;
+    --popover-foreground: 210 40% 98%;
+ 
+    --primary: 210 40% 98%;
+    --primary-foreground: 220 28% 8%;
+ 
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 210 40% 98%;
+ 
+    --muted: 220 16% 18%;
+    --muted-foreground: 215 16% 70%;
+ 
+    --accent: 220 22% 14%;
+    --accent-foreground: 210 40% 98%;
+ 
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 18% 20%;
+    --input: 220 18% 20%;
+    --ring: 210 40% 85%;
+ 
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 220 28% 6%;
+    --foreground: 210 40% 98%;
+    --card: 220 20% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 20% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 220 28% 8%;
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 16% 18%;
+    --muted-foreground: 215 16% 70%;
+    --accent: 220 22% 14%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 18% 20%;
+    --input: 220 18% 20%;
+    --ring: 210 40% 85%;
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(1200px 600px at 10% -10%, rgba(56, 189, 248, 0.18), transparent 60%),
+      radial-gradient(900px 500px at 90% 10%, rgba(244, 114, 182, 0.18), transparent 60%),
+      radial-gradient(1200px 700px at 50% 120%, rgba(167, 139, 250, 0.12), transparent 65%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.35));
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(16px);
+  }
+
+  .text-gradient {
+    background: linear-gradient(120deg, #38bdf8, #f472b6, #a78bfa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(circle at center, black 0%, transparent 70%);
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.7s ease-out both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.8s ease-out both;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}

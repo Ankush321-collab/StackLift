@@ -1,0 +1,18 @@
+**/node_modules/
+**/output/
+**/dist/
+**/.env
+**/.docker-tmp/
+nul
+*.log
+
+# SSL Certificates & Private Keys - never commit these
+*.pem
+*.cert
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Utility/cleanup scripts that may contain secrets
+strip-secret.ps1

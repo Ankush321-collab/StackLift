@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 const connectionString = process.env.DATABASE_URL
 const pool = new pg.Pool({ 
     connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : { rejectUnauthorized: false, requestCert: true }
+    ssl: { rejectUnauthorized: false }
 })
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
@@ -44,9 +44,29 @@ const clickhouse = createClient({
     password: process.env.CLICKHOUSE_PASSWORD,
 })
 
-if(clickhouse) {
-    console.log('✅ ClickHouse client initialized');
+async function initClickHouse() {
+    try {
+        await clickhouse.exec({ query: 'SELECT 1' })
+        console.log('✅ ClickHouse connected and reachable')
+
+        await clickhouse.exec({
+            query: `CREATE TABLE IF NOT EXISTS log_events (
+                event_id String,
+                deployment_id String,
+                log String,
+                timestamp DateTime
+            ) ENGINE = MergeTree()
+            ORDER BY (deployment_id, timestamp)
+            PARTITION BY toYYYYMM(timestamp)`
+        })
+        console.log('✅ log_events table verified/created')
+    } catch (err) {
+        console.error('❌ ClickHouse init error:', err.message)
+        console.error('   ClickHouse inserts will fail until this is resolved')
+    }
 }
+
+initClickHouse()
 
 console.log('📡 Initializing Kafka connection for api-server...');
 
@@ -59,7 +79,8 @@ const kafka = new Kafka({
         password: process.env.KAFKA_PASSWORD
     },
     ssl: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        servername: process.env.KAFKA_SERVER_NAME || 'kafka-8601bde-srmap-c83a.e.aivencloud.com'
     },
     connectionTimeout: Number(process.env.KAFKA_CONNECTION_TIMEOUT || 10000),
     requestTimeout: Number(process.env.KAFKA_REQUEST_TIMEOUT || 10000),
@@ -95,8 +116,18 @@ io.on('connection', socket => {
 
 app.use(express.json())
 
+let kafkaConnected = false
+
 app.get('/', (req, res) => {
     res.json({ message: "API server running" })
+})
+
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        kafka: kafkaConnected ? 'connected' : 'disconnected',
+        timestamp: new Date().toISOString()
+    })
 })
 
 // Get all projects
@@ -198,19 +229,15 @@ app.post('/project', async (req, res) => {
         res.json({ status: 'success', data: deploymnent })
     } catch (error) {
         console.error('❌ Error creating project:', error)
-        const details = process.env.NODE_ENV === 'development'
-            ? {
-                message: error?.message || String(error),
-                stack: error?.stack,
-                name: error?.name,
-                code: error?.code,
-                metadata: error?.$metadata
-            }
-            : undefined
-
         res.status(500).json({
             error: 'Failed to create project',
-            details
+            message: error?.message || String(error),
+            code: error?.code,
+            ...(process.env.NODE_ENV === 'development' && {
+                stack: error?.stack,
+                name: error?.name,
+                metadata: error?.$metadata
+            })
         })
     }
 })
@@ -261,7 +288,8 @@ app.post('/deploy', async (req, res) => {
                             { name: 'AWS_S3_BUCKET_NAME', value: process.env.AWS_S3_BUCKET_NAME },
                             { name: 'KAFKA_BROKER', value: process.env.KAFKA_BROKER },
                             { name: 'KAFKA_USER', value: process.env.KAFKA_USER },
-                            { name: 'KAFKA_PASSWORD', value: process.env.KAFKA_PASSWORD }
+                            { name: 'KAFKA_PASSWORD', value: process.env.KAFKA_PASSWORD },
+                            { name: 'KAFKA_SERVER_NAME', value: process.env.KAFKA_SERVER_NAME }
                         ]
                     }
                 ]
@@ -274,18 +302,15 @@ app.post('/deploy', async (req, res) => {
 
     } catch (error) {
         console.error('Error initiating deployment:', error)
-        const details = process.env.NODE_ENV === 'development'
-            ? {
-                message: error?.message || String(error),
-                name: error?.name,
-                code: error?.code,
-                metadata: error?.$metadata
-            }
-            : undefined
-
         res.status(500).json({
             error: 'Failed to initiate build',
-            details
+            message: error?.message || String(error),
+            code: error?.code,
+            ...(process.env.NODE_ENV === 'development' && {
+                stack: error?.stack,
+                name: error?.name,
+                metadata: error?.$metadata
+            })
         })
     }
 })
@@ -311,53 +336,98 @@ app.get('/logs/:id', async (req, res) => {
 
     res.json({ status: 'success', data })
   } catch (err) {
-    console.error('ClickHouse Query Error:', err)
+    console.error('ClickHouse Query Error:', err.message)
+    console.error('   Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
     // Return empty logs instead of 500 if the query fails (e.g. table not exists yet)
     res.json({ status: 'success', data: [], message: 'No logs found or table not ready' })
   }
 })
 
 async function startKafkaConsumer() {
-    try {
-        await consumer.connect()
-        await consumer.subscribe({ topic: 'container-logs', fromBeginning: true })
+    while (true) {
+        try {
+            await consumer.connect()
+            kafkaConnected = true
+            console.log('✅ Kafka consumer connected to broker')
+            
+            await consumer.subscribe({ topic: 'container-logs', fromBeginning: true })
+            console.log('✅ Subscribed to topic: container-logs')
 
-        await consumer.run({
-            eachMessage: async ({ message }) => {
-                try {
-                    if (!message.value) {
-                        return
+            await consumer.run({
+                eachMessage: async ({ message }) => {
+                    try {
+                        if (!message.value) {
+                            console.log('⚠️ Received empty Kafka message, skipping')
+                            return
+                        }
+
+                        console.log('📨 Received message from Kafka')
+                        const stringMessage = message.value.toString()
+                        const { deploymentId, logs, status, timestamp } = JSON.parse(stringMessage)
+
+                        // Handle status update messages
+                        if (status) {
+                            console.log(`📊 Status update for deployment ${deploymentId}: ${status}`)
+                            
+                            // Update deployment status in PostgreSQL
+                            try {
+                                await prisma.deployment.update({
+                                    where: { id: deploymentId },
+                                    data: { status: status }
+                                })
+                                console.log(`✅ Deployment ${deploymentId} status updated to: ${status}`)
+                            } catch (dbErr) {
+                                console.error(`❌ Failed to update deployment status in DB:`, dbErr.message)
+                            }
+                            
+                            // Emit status update to socket.io
+                            io.to(deploymentId).emit('message', `status:${status}`)
+                            return
+                        }
+
+                        // Handle log messages
+                        if (logs) {
+                            try {
+                                const ts = timestamp ? new Date(timestamp) : new Date()
+                                if (isNaN(ts.getTime())) {
+                                    console.error(`❌ Invalid timestamp received: ${timestamp}, falling back to now`)
+                                }
+                                const validTs = isNaN(ts.getTime()) ? new Date() : ts
+                                const clickhouseTimestamp = validTs.toISOString().replace('T', ' ').replace('Z', '').substring(0, 19)
+                                await clickhouse.insert({
+                                    table: 'log_events',
+                                    values: [{
+                                        event_id: uuidv4(),
+                                        deployment_id: deploymentId,
+                                        log: logs,
+                                        timestamp: clickhouseTimestamp
+                                    }],
+                                    format: 'JSONEachRow'
+                                })
+                                console.log(`✅ Logged to ClickHouse for deployment: ${deploymentId}`)
+                            } catch (chErr) {
+                                console.error(`❌ ClickHouse insert error:`, chErr.message)
+                                console.error(`   Full error:`, JSON.stringify(chErr, Object.getOwnPropertyNames(chErr), 2))
+                                console.error(`   deployment_id=${deploymentId}, logs=${logs?.substring(0, 100)}`)
+                            }
+
+                            // Emit to socket.io for real-time updates.
+                            io.to(deploymentId).emit('message', `log:${logs}`)
+                        }
+                    } catch (err) {
+                        console.error('❌ Error processing Kafka message:', err.message)
                     }
-
-                    console.log('📨 Received message from Kafka')
-                    const stringMessage = message.value.toString()
-                    const { deploymentId, logs, timestamp } = JSON.parse(stringMessage)
-
-                    await clickhouse.insert({
-                        table: 'log_events',
-                        values: [{
-                            event_id: uuidv4(),
-                            deployment_id: deploymentId,
-                            log: logs,
-                            timestamp: timestamp || new Date().toISOString()
-                        }],
-                        format: 'JSONEachRow'
-                    })
-
-                    console.log(`✅ Logged to ClickHouse for deployment: ${deploymentId}`)
-
-                    // Emit to socket.io for real-time updates.
-                    io.to(deploymentId).emit('message', `log:${logs}`)
-                } catch (err) {
-                    console.error('❌ Error processing Kafka message:', err.message)
                 }
-            }
-        })
+            })
 
-        console.log('✅ Kafka consumer connected and ready!')
-    } catch (err) {
-        console.warn('⚠️ Kafka consumer warning:', err.message)
-        console.warn('The "container-logs" topic may not exist yet.')
+            console.log('✅ Kafka consumer connected and ready!')
+            return
+        } catch (err) {
+            kafkaConnected = false
+            console.error('❌ Kafka consumer FAILED to connect:', err.message)
+            console.error('⚠️ Retrying in 10 seconds...')
+            await new Promise(resolve => setTimeout(resolve, 10000))
+        }
     }
 }
 

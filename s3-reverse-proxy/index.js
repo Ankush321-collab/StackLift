@@ -25,19 +25,6 @@ const pool = new pg.Pool({
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
-// Initialize Prisma with PostgreSQL adapter
-const connectionString = process.env.DATABASE_URL
-const caFilePath = process.env.PG_CA_PATH || path.join(__dirname, 'ca.pem')
-const caCert = fs.existsSync(caFilePath) ? fs.readFileSync(caFilePath, 'utf8') : undefined
-const pool = new pg.Pool({ 
-    connectionString,
-    ssl: process.env.NODE_ENV === 'production'
-        ? (caCert ? { rejectUnauthorized: true, ca: caCert } : { rejectUnauthorized: true })
-        : { rejectUnauthorized: false, requestCert: true }
-})
-const adapter = new PrismaPg(pool)
-const prisma = new PrismaClient({ adapter })
-
 const proxy = httpProxy.createProxy()
 
 app.use(async (req, res) => {

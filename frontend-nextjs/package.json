@@ -13,6 +13,7 @@
     "axios": "^1.6.7",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "framer-motion": "^12.40.0",
     "lucide-react": "^0.323.0",
     "next": "14.1.0",
     "react": "^18",

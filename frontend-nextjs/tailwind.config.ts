@@ -52,6 +52,19 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          "2": "hsl(var(--surface-2))",
+        },
+        state: {
+          running: "hsl(var(--state-running))",
+          succeed: "hsl(var(--state-succeed))",
+          failed: "hsl(var(--state-failed))",
+          submitted: "hsl(var(--state-submitted))",
+        },
+      },
+      fontFamily: {
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Menlo', 'Consolas', '"Liberation Mono"', 'monospace'],
       },
       borderRadius: {
         lg: "var(--radius)",

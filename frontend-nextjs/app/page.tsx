@@ -4,28 +4,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Github, Loader2, List } from "lucide-react";
-import { Fira_Code } from "next/font/google";
-import { 
-  createProject, 
+import { Github, Loader2, List, Terminal, Rocket, CheckCircle2, XCircle } from "lucide-react";
+import {
+  createProject,
   deployProject,
   getProject,
-  getDeployment, 
+  getDeployment,
   getLogs,
-  getPreviewURL, 
-  SOCKET_URL 
+  getPreviewURL,
+  SOCKET_URL
 } from "@/lib/api";
 import { DeploymentStatus } from "@/lib/types";
 
-const firaCode = Fira_Code({ subsets: ["latin"] });
+const cardVariants = {
+  hidden: { opacity: 0, y: 16, rotateX: 5 },
+  visible: { opacity: 1, y: 0, rotateX: 0, transition: { duration: 0.5, ease: "easeOut" as const } },
+};
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const urlProjectId = searchParams.get("projectId");
   const urlDeploymentId = searchParams.get("deploymentId");
-  
+
   const [repoURL, setURL] = useState<string>("");
   const [projectName, setProjectName] = useState<string>("");
   const [logs, setLogs] = useState<string[]>([]);
@@ -34,18 +37,15 @@ function HomeContent() {
   const [deploymentId, setDeploymentId] = useState<string | undefined>();
   const [deployPreviewURL, setDeployPreviewURL] = useState<string | undefined>();
   const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatus | undefined>();
-  
+
   const logContainerRef = useRef<HTMLElement>(null);
   const socketRef = useRef<Socket | null>(null);
 
-  // Load existing deployment if query params present
   useEffect(() => {
     const loadExistingDeployment = async () => {
       if (urlDeploymentId && urlProjectId) {
         try {
           setLoading(true);
-          
-          // Get deployment and project details
           const [deploymentRes, projectRes] = await Promise.all([
             getDeployment(urlDeploymentId),
             getProject(urlProjectId)
@@ -61,7 +61,6 @@ function HomeContent() {
           setDeploymentStatus(deployment.status);
           setDeployPreviewURL(getPreviewURL(project.subdomain, project.id));
 
-          // Load existing logs
           try {
             const logsRes = await getLogs(deployment.id);
             if (logsRes.data && logsRes.data.length > 0) {
@@ -72,7 +71,6 @@ function HomeContent() {
             console.log("No logs available yet");
           }
 
-          // Subscribe to deployment for real-time updates
           if (socketRef.current && deployment.status !== DeploymentStatus.DEPLOYED && deployment.status !== DeploymentStatus.FAILED) {
             socketRef.current.emit("subscribe", deployment.id);
           } else {
@@ -108,7 +106,6 @@ function HomeContent() {
     setDeploymentStatus(DeploymentStatus.QUEUED);
 
     try {
-      // Step 1: Create project
       const projectResponse = await createProject({
         name: projectName,
         gitURL: repoURL,
@@ -117,11 +114,10 @@ function HomeContent() {
       if (projectResponse && projectResponse.data) {
         const project = projectResponse.data;
         setProjectId(project.id);
-        
+
         const previewURL = getPreviewURL(project.subdomain, project.id);
         setDeployPreviewURL(previewURL);
 
-        // Step 2: Deploy the project
         const deployResponse = await deployProject({
           projectId: project.id,
         });
@@ -130,9 +126,7 @@ function HomeContent() {
           const { deploymentId } = deployResponse.data;
           setDeploymentId(deploymentId);
 
-          // Step 3: Subscribe to deployment logs
           if (socketRef.current) {
-            console.log(`Subscribing to deployment: ${deploymentId}`);
             socketRef.current.emit("subscribe", deploymentId);
           }
         }
@@ -146,9 +140,15 @@ function HomeContent() {
   }, [projectName, repoURL]);
 
   const handleSocketIncommingMessage = useCallback((message: string) => {
-    console.log(`[Incoming Socket Message]:`, message);
-    
-    // Parse the message - format is "log:actual log content"
+    if (message.startsWith("status:")) {
+      const status = message.substring(7);
+      setDeploymentStatus(status as DeploymentStatus);
+      if (status === 'deployed' || status === 'failed') {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (message.startsWith("log:")) {
       const log = message.substring(4);
       setLogs((prev) => [...prev, log]);
@@ -166,7 +166,6 @@ function HomeContent() {
         normalizedLog.includes("could not connect to kafka") ||
         normalizedLog.includes("project_id environment variable is missing");
 
-      // Use explicit markers to avoid false failures from non-fatal stderr output.
       if (isSuccessLog) {
         setDeploymentStatus(DeploymentStatus.DEPLOYED);
         setLoading(false);
@@ -176,14 +175,13 @@ function HomeContent() {
       } else if (normalizedLog.includes("build started") || normalizedLog.includes("building")) {
         setDeploymentStatus(DeploymentStatus.BUILDING);
       }
-      
+
       logContainerRef.current?.scrollIntoView({ behavior: "smooth" });
     } else if (message.includes("Joined")) {
       setLogs((prev) => [...prev, message]);
     }
   }, []);
 
-  // Initialize socket connection
   useEffect(() => {
     socketRef.current = io(SOCKET_URL);
 
@@ -201,23 +199,48 @@ function HomeContent() {
     };
   }, [handleSocketIncommingMessage]);
 
+  const StatusIndicator = () => {
+    if (!deploymentStatus) return null;
+    const config: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
+      [DeploymentStatus.DEPLOYED]: { icon: CheckCircle2, color: "text-state-succeed", label: "DEPLOYED" },
+      [DeploymentStatus.FAILED]: { icon: XCircle, color: "text-state-failed", label: "FAILED" },
+      [DeploymentStatus.BUILDING]: { icon: Terminal, color: "text-state-running", label: "BUILDING" },
+      [DeploymentStatus.QUEUED]: { icon: Loader2, color: "text-state-submitted", label: "QUEUED" },
+      [DeploymentStatus.PENDING]: { icon: Loader2, color: "text-state-submitted", label: "PENDING" },
+    };
+    const c = config[deploymentStatus] || config[DeploymentStatus.QUEUED];
+    const Icon = c.icon;
+    return (
+      <div className={`flex items-center gap-2 text-xs font-medium ${c.color}`}>
+        <Icon className={`h-3.5 w-3.5 ${deploymentStatus === DeploymentStatus.QUEUED || deploymentStatus === DeploymentStatus.BUILDING ? "animate-spin" : ""}`} />
+        <span className="mono uppercase tracking-wider">{c.label}</span>
+      </div>
+    );
+  };
+
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-12">
       <div className="absolute inset-0 -z-10">
-        <div className="absolute left-1/2 top-[-180px] h-[360px] w-[360px] -translate-x-1/2 rounded-full bg-sky-500/20 blur-[140px] animate-float" />
-        <div className="absolute right-[-120px] top-24 h-[320px] w-[320px] rounded-full bg-pink-500/20 blur-[150px] animate-float" />
-        <div className="absolute left-[-120px] bottom-16 h-[280px] w-[280px] rounded-full bg-violet-500/20 blur-[140px] animate-float" />
-        <div className="absolute inset-0 bg-grid opacity-40" />
+        <div className="absolute left-1/2 top-[-180px] h-[360px] w-[360px] -translate-x-1/2 rounded-full bg-primary/10 blur-[140px] animate-float" />
+        <div className="absolute right-[-120px] top-24 h-[320px] w-[320px] rounded-full bg-primary/8 blur-[150px] animate-float" />
+        <div className="absolute left-[-120px] bottom-16 h-[280px] w-[280px] rounded-full bg-primary/6 blur-[140px] animate-float" />
+        <div className="absolute inset-0 bg-grid opacity-30" />
       </div>
 
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-        <div className="flex flex-wrap items-center justify-between gap-4 animate-fade-up">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" as const }}
+          className="flex flex-wrap items-center justify-between gap-4"
+        >
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Stacklift Deploy</p>
+            <p className="mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Stacklift Deploy</p>
             <h1 className="mt-3 text-4xl font-semibold text-gradient sm:text-5xl">
               Deploy your frontend in minutes
             </h1>
-            <p className="mt-3 text-base text-slate-300">
+            <p className="mt-3 text-base text-muted-foreground">
               Push a GitHub repo and get a production-ready build with instant preview links and logs.
             </p>
           </div>
@@ -225,18 +248,26 @@ function HomeContent() {
             <Button
               variant="outline"
               size="sm"
-              className="border-slate-700/60 bg-slate-900/40 hover:bg-slate-800/60"
+              className="border-border bg-surface/60 hover:bg-surface-2/80"
             >
               <List className="mr-2 h-4 w-4" />
               Projects
             </Button>
           </Link>
-        </div>
+        </motion.div>
 
-        <section className="glass-card rounded-2xl p-6 shadow-2xl animate-fade-up">
+        {/* Deploy Form Card */}
+        <motion.section
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          whileHover={{ rotateY: -1, rotateX: 1, y: -2 }}
+          style={{ transformStyle: "preserve-3d", perspective: 1000 }}
+          className="glass-card custom-shadow rounded-xl p-6"
+        >
           <div className="grid gap-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 mb-2">
+              <label className="mono mb-1.5 block text-[10px] uppercase tracking-wider text-muted-foreground">
                 Project Name
               </label>
               <Input
@@ -245,34 +276,34 @@ function HomeContent() {
                 onChange={(e) => setProjectName(e.target.value)}
                 type="text"
                 placeholder="my-awesome-project"
-                className="bg-slate-950/60 border-slate-700/60 focus-visible:ring-sky-500/40"
+                className="bg-background/60 border-border focus-visible:ring-primary/40"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 mb-2">
+              <label className="mono mb-1.5 block text-[10px] uppercase tracking-wider text-muted-foreground">
                 GitHub Repository URL
               </label>
               <span className="flex items-center gap-3">
-                <Github className="text-xl text-slate-400" />
+                <Github className="text-xl text-muted-foreground" />
                 <Input
                   disabled={loading}
                   value={repoURL}
                   onChange={(e) => setURL(e.target.value)}
                   type="url"
                   placeholder="https://github.com/username/repo"
-                  className="bg-slate-950/60 border-slate-700/60 focus-visible:ring-sky-500/40"
+                  className="bg-background/60 border-border focus-visible:ring-primary/40"
                 />
               </span>
               {repoURL && !isValidURL[0] && (
-                <p className="text-red-400 text-sm mt-2">{isValidURL[1]}</p>
+                <p className="text-state-failed text-sm mt-2">{isValidURL[1]}</p>
               )}
             </div>
 
             <Button
               onClick={handleClickDeploy}
               disabled={!isValidInput || loading}
-              className="w-full bg-sky-500/90 text-slate-950 hover:bg-sky-400"
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {loading ? (
                 <>
@@ -283,55 +314,110 @@ function HomeContent() {
                   {!deploymentStatus && "Deploying..."}
                 </>
               ) : (
-                "Deploy"
+                <>
+                  <Rocket className="mr-2 h-4 w-4" />
+                  Deploy
+                </>
               )}
             </Button>
-          </div>
-        </section>
 
+            <StatusIndicator />
+          </div>
+        </motion.section>
+
+        {/* Preview URL */}
         {deployPreviewURL && (
-          <section className="glass-card rounded-2xl p-5 animate-fade-up">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Preview URL</p>
+          <motion.section
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover={{ rotateY: -1, rotateX: 1, y: -2 }}
+            style={{ transformStyle: "preserve-3d", perspective: 1000 }}
+            className="glass-card custom-shadow rounded-xl p-5"
+          >
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">Preview URL</p>
             <a
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-900/70 px-4 py-3 text-sky-300 transition-colors hover:bg-slate-800/70"
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-surface/80 px-4 py-3 text-primary transition-colors hover:bg-surface-2 font-mono text-sm"
               href={deployPreviewURL}
             >
               {deployPreviewURL}
             </a>
             {deploymentStatus === DeploymentStatus.DEPLOYED && (
-              <p className="text-emerald-400 text-sm mt-3">Deployment successful!</p>
+              <p className="text-state-succeed text-sm mt-3 flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Deployment successful!
+              </p>
             )}
             {deploymentStatus === DeploymentStatus.FAILED && (
-              <p className="text-red-400 text-sm mt-3">Deployment failed. Check logs below.</p>
+              <p className="text-state-failed text-sm mt-3 flex items-center gap-1.5">
+                <XCircle className="h-3.5 w-3.5" /> Deployment failed. Check logs below.
+              </p>
             )}
-          </section>
+          </motion.section>
         )}
 
+        {/* Mac-Style Terminal Log Viewer */}
         {logs.length > 0 && (
-          <section className="animate-fade-up">
+          <motion.section
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            className="animate-fade-up"
+          >
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Deployment Logs</p>
-              <span className="text-xs text-emerald-300/80">Live stream</span>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">Deployment Logs</p>
+              <span className="mono text-[10px] text-state-succeed/80 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-state-succeed animate-pulse" />
+                Live stream
+              </span>
             </div>
-            <div className="relative">
-              <div className="absolute inset-x-0 top-0 h-10 rounded-2xl bg-gradient-to-b from-emerald-500/20 to-transparent pointer-events-none" />
+
+            {/* Terminal Window */}
+            <div className="flex flex-col overflow-hidden rounded-xl border border-border terminal-glow">
+              {/* Traffic Lights Header */}
+              <div className="flex shrink-0 items-center justify-between border-b border-border bg-surface/80 px-4 py-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-state-failed/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-state-submitted/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-state-succeed/80" />
+                </div>
+                <span className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  build-output
+                </span>
+                <span className="mono text-[10px] text-muted-foreground">
+                  {deploymentStatus === DeploymentStatus.DEPLOYED ? "done" :
+                   deploymentStatus === DeploymentStatus.BUILDING ? "running" :
+                   deploymentStatus === DeploymentStatus.FAILED ? "error" : "waiting"}
+                </span>
+              </div>
+
+              {/* Terminal Body */}
               <div
-                className={`${firaCode.className} text-sm text-emerald-200 logs-container border border-emerald-500/40 rounded-2xl p-4 h-[340px] overflow-y-auto bg-slate-950/80 shadow-[0_20px_60px_rgba(15,23,42,0.6)]`}
+                className="mono flex-1 overflow-auto bg-background p-4 text-[12px] leading-relaxed h-[340px]"
               >
-                <pre className="flex flex-col gap-1">
-                  {logs.map((log, i) => (
-                    <code
-                      ref={logs.length - 1 === i ? logContainerRef : undefined}
-                      key={i}
-                      className="animate-fade-in"
-                    >{`> ${log}`}</code>
-                  ))}
-                </pre>
+                {logs.map((log, i) => {
+                  const isError = log.toLowerCase().startsWith("error") || log.toLowerCase().includes("fatal");
+                  const isSuccess = log.toLowerCase().includes("uploaded") || log.toLowerCase().includes("completed") || log.toLowerCase().includes("success");
+                  return (
+                    <div key={i} className="flex gap-2 animate-fade-in">
+                      <span className="select-none text-muted-foreground/50">{">"}</span>
+                      <span
+                        ref={logs.length - 1 === i ? logContainerRef : undefined}
+                        className={
+                          isError ? "text-state-failed" :
+                          isSuccess ? "text-state-succeed" :
+                          "text-foreground/70"
+                        }
+                      >
+                        {log}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </section>
+          </motion.section>
         )}
       </div>
     </main>
@@ -340,7 +426,7 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<main className="flex justify-center items-center min-h-screen py-10">Loading...</main>}>
+    <Suspense fallback={<main className="flex justify-center items-center min-h-screen py-10 text-muted-foreground mono text-sm">Loading...</main>}>
       <HomeContent />
     </Suspense>
   );

@@ -2,10 +2,21 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { getProject, deployProject, getPreviewURL } from "@/lib/api";
 import { ProjectWithDeployments, DeploymentStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, GitBranch, Clock, ArrowLeft, Loader2 } from "lucide-react";
+import { ExternalLink, GitBranch, Clock, ArrowLeft, Loader2, Rocket, Hash } from "lucide-react";
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 16, rotateX: 5 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    rotateX: 0,
+    transition: { duration: 0.5, delay: i * 0.08, ease: "easeOut" as const },
+  }),
+};
 
 export default function ProjectDetailClient() {
   const params = useParams();
@@ -43,7 +54,6 @@ export default function ProjectDetailClient() {
       const response = await deployProject({ projectId: project.id });
 
       if (response.data.deploymentId) {
-        // Redirect to home page with deployment tracking
         router.push(`/?deploymentId=${response.data.deploymentId}&projectId=${project.id}`);
       }
     } catch (err) {
@@ -53,20 +63,21 @@ export default function ProjectDetailClient() {
     }
   };
 
-  const getStatusColor = (status: DeploymentStatus) => {
+  const getStatusBadge = (status: DeploymentStatus) => {
+    const base = "mono rounded-md px-2 py-0.5 text-[10px] uppercase tracking-wider font-medium";
     switch (status) {
       case DeploymentStatus.DEPLOYED:
-        return "text-green-500 bg-green-500/10";
+        return `${base} text-state-succeed bg-state-succeed/10 border border-state-succeed/20`;
       case DeploymentStatus.BUILDING:
-        return "text-blue-500 bg-blue-500/10";
+        return `${base} text-state-running bg-state-running/10 border border-state-running/20`;
       case DeploymentStatus.FAILED:
-        return "text-red-500 bg-red-500/10";
+        return `${base} text-state-failed bg-state-failed/10 border border-state-failed/20`;
       case DeploymentStatus.QUEUED:
-        return "text-yellow-500 bg-yellow-500/10";
+        return `${base} text-state-submitted bg-state-submitted/10 border border-state-submitted/20`;
       case DeploymentStatus.PENDING:
-        return "text-orange-500 bg-orange-500/10";
+        return `${base} text-state-submitted bg-state-submitted/10 border border-state-submitted/20`;
       default:
-        return "text-gray-500 bg-gray-500/10";
+        return `${base} text-muted-foreground bg-muted/30 border border-border`;
     }
   };
 
@@ -83,9 +94,9 @@ export default function ProjectDetailClient() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-center glass-card rounded-2xl px-8 py-6">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400 mx-auto mb-4"></div>
-          <p className="text-slate-200">Loading project...</p>
+        <div className="text-center glass-card rounded-xl px-8 py-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground mono text-sm">Loading project...</p>
         </div>
       </div>
     );
@@ -94,10 +105,10 @@ export default function ProjectDetailClient() {
   if (error || !project) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-center glass-card rounded-2xl px-8 py-6">
-          <p className="text-xl mb-4 text-red-400">Error: {error || "Project not found"}</p>
+        <div className="text-center glass-card rounded-xl px-8 py-6">
+          <p className="text-xl mb-4 text-state-failed">Error: {error || "Project not found"}</p>
           <Link href="/projects">
-            <Button className="bg-sky-500 text-slate-950 hover:bg-sky-400">Back to Projects</Button>
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Back to Projects</Button>
           </Link>
         </div>
       </div>
@@ -109,40 +120,42 @@ export default function ProjectDetailClient() {
   return (
     <main className="relative min-h-screen px-4 py-12">
       <div className="absolute inset-0 -z-10">
-        <div className="absolute left-[15%] top-10 h-56 w-56 rounded-full bg-sky-500/20 blur-[120px] animate-float" />
-        <div className="absolute right-[12%] top-32 h-64 w-64 rounded-full bg-violet-500/20 blur-[140px] animate-float" />
+        <div className="absolute left-[15%] top-10 h-56 w-56 rounded-full bg-primary/10 blur-[120px] animate-float" />
+        <div className="absolute right-[12%] top-32 h-64 w-64 rounded-full bg-primary/8 blur-[140px] animate-float" />
       </div>
 
       <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-8 animate-fade-up">
-          <Link href="/projects" className="inline-flex items-center text-slate-400 hover:text-slate-100 mb-4">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="mb-8"
+        >
+          <Link href="/projects" className="inline-flex items-center text-muted-foreground hover:text-foreground mb-4 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
+            <span className="mono text-[10px] uppercase tracking-wider">Back to Projects</span>
           </Link>
 
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Project Overview</p>
+              <p className="mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Project Overview</p>
               <h1 className="mt-3 text-4xl font-semibold text-gradient">{project.name}</h1>
-              <div className="mt-2 flex items-center gap-2 text-slate-400">
+              <div className="mt-2 flex items-center gap-2 text-muted-foreground">
                 <GitBranch className="h-4 w-4" />
                 <a
                   href={project.giturl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-sky-300 transition-colors"
+                  className="hover:text-primary transition-colors font-mono text-sm"
                 >
                   {project.giturl}
                 </a>
               </div>
             </div>
             <div className="flex gap-3">
-              <a
-                href={previewURL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" className="border-slate-700/60 bg-slate-900/40 hover:bg-slate-800/70">
+              <a href={previewURL} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" className="border-border bg-surface/60 hover:bg-surface-2/80">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Visit Site
                 </Button>
@@ -150,7 +163,7 @@ export default function ProjectDetailClient() {
               <Button
                 onClick={handleRedeploy}
                 disabled={deploying}
-                className="bg-sky-500 text-slate-950 hover:bg-sky-400"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {deploying ? (
                   <>
@@ -158,70 +171,84 @@ export default function ProjectDetailClient() {
                     Deploying...
                   </>
                 ) : (
-                  "Redeploy"
+                  <>
+                    <Rocket className="mr-2 h-4 w-4" />
+                    Redeploy
+                  </>
                 )}
               </Button>
             </div>
           </div>
-        </div>
+        </motion.div>
 
+        {/* Stat Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="glass-card rounded-2xl p-6">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">Subdomain</p>
-            <p className="font-mono text-slate-200">{project.subdomain}</p>
-          </div>
-          <div className="glass-card rounded-2xl p-6">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">Created</p>
-            <div className="flex items-center gap-2 text-slate-200">
-              <Clock className="h-4 w-4" />
-              {formatDate(project.createdAt)}
-            </div>
-          </div>
-          <div className="glass-card rounded-2xl p-6">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">Total Deployments</p>
-            <p className="text-2xl font-bold text-slate-100">{project.deployments.length}</p>
-          </div>
+          {[
+            { label: "Subdomain", value: project.subdomain, icon: ExternalLink },
+            { label: "Created", value: formatDate(project.createdAt), icon: Clock },
+            { label: "Total Deployments", value: project.deployments.length.toString(), icon: Hash },
+          ].map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              custom={i}
+              variants={cardVariants}
+              initial="hidden"
+              animate="visible"
+              whileHover={{ rotateY: -2, rotateX: 2, y: -2 }}
+              style={{ transformStyle: "preserve-3d", perspective: 600 }}
+              className="glass-card custom-shadow rounded-xl p-5"
+            >
+              <label className="mono mb-2 block text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</label>
+              <div className="flex items-center gap-2">
+                <stat.icon className="h-4 w-4 text-primary/60" />
+                <p className="font-mono text-sm text-foreground">{stat.value}</p>
+              </div>
+            </motion.div>
+          ))}
         </div>
 
+        {/* Deployment History */}
         <div>
           <h2 className="text-2xl font-bold mb-4">Deployment History</h2>
           {project.deployments.length === 0 ? (
-            <div className="glass-card rounded-2xl p-8 text-center">
-              <p className="text-slate-300">No deployments yet</p>
+            <div className="glass-card rounded-xl p-8 text-center">
+              <p className="text-muted-foreground">No deployments yet</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {project.deployments.map((deployment) => (
-                <div
+              {project.deployments.map((deployment, i) => (
+                <motion.div
                   key={deployment.id}
-                  className="glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1"
+                  custom={i}
+                  variants={cardVariants}
+                  initial="hidden"
+                  animate="visible"
+                  whileHover={{ rotateY: -1, rotateX: 1, y: -2 }}
+                  style={{ transformStyle: "preserve-3d", perspective: 1000 }}
+                  className="glass-card custom-shadow rounded-xl p-5"
                 >
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-center">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                            deployment.status
-                          )}`}
-                        >
+                        <span className={getStatusBadge(deployment.status)}>
                           {deployment.status}
                         </span>
-                        <span className="text-sm text-slate-400 font-mono">
+                        <span className="mono text-xs text-muted-foreground">
                           {deployment.id.substring(0, 8)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Clock className="h-3 w-3" />
-                        {formatDate(deployment.createdAt)}
+                        <span className="font-mono text-xs">{formatDate(deployment.createdAt)}</span>
                       </div>
                     </div>
                     <Link href={`/?deploymentId=${deployment.id}&projectId=${project.id}`}>
-                      <Button variant="outline" size="sm" className="border-slate-700/60 bg-slate-900/40 hover:bg-slate-800/70">
+                      <Button variant="outline" size="sm" className="border-border bg-surface/60 hover:bg-surface-2/80">
                         View Logs
                       </Button>
                     </Link>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}

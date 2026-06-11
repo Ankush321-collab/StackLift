@@ -49,11 +49,17 @@ const getKafkaSSLConfig = () => {
             ca: [ca],
             servername: process.env.KAFKA_SERVER_NAME || 'kafka-8601bde-srmap-c83a.e.aivencloud.com'
         };
-    } else {
+    } else if (fs.existsSync(path.join(__dirname, 'ca.pem'))) {
         console.log('📜 Using Kafka certificates from files');
         return {
             rejectUnauthorized: true,
             ca: [fs.readFileSync(path.join(__dirname, 'ca.pem'))],
+            servername: process.env.KAFKA_SERVER_NAME || 'kafka-8601bde-srmap-c83a.e.aivencloud.com'
+        };
+    } else {
+        console.log('📜 No SSL certificates found, using SASL without strict SSL verification');
+        return {
+            rejectUnauthorized: false,
             servername: process.env.KAFKA_SERVER_NAME || 'kafka-8601bde-srmap-c83a.e.aivencloud.com'
         };
     }
@@ -108,6 +114,26 @@ async function publishlog(log){
     }
 }
 
+async function publishstatus(status){
+    try {
+        await publisher.send({
+            topic: 'container-logs',
+            acks: 1,
+            messages: [{
+                value: JSON.stringify({
+                    projectId: PROJECT_ID,
+                    deploymentId: deploymentid,
+                    status: status,
+                    timestamp: new Date().toISOString()
+                })
+            }]
+        });
+        console.log(`📤 Published status '${status}' for deployment:${deploymentid}`);
+    } catch (err) {
+        console.error('❌ Kafka status publish error:', err.message);
+    }
+}
+
 async function init() {
     console.log('Executing script.js');
     console.log('PROJECT_ID:', PROJECT_ID);
@@ -123,6 +149,7 @@ async function init() {
         process.exit(1);
     }
     
+    await publishstatus('building')
     await publishlog('Build Started')
     const outDirPath = path.join(__dirname, 'output');
 
@@ -152,7 +179,7 @@ export default defineConfig({
         await publishlog(`Error: ${data.toString()}`);
     });
 
-    p.on('close', async function () {
+    p.on('close', async function (code) {
         console.log('Build Complete');
         await publishlog('Build Completed');
         const distFolderPath = path.join(__dirname, 'output', 'dist');
@@ -164,6 +191,7 @@ export default defineConfig({
             const outputFiles = fs.readdirSync(path.join(__dirname, 'output'));
             console.log('Files in output folder:', outputFiles);
             await publishlog(`Files in output folder: ${outputFiles.join(', ')}`);
+            await publishstatus('failed');
             await publisher.disconnect();
             process.exit(1);
         }
@@ -197,6 +225,7 @@ export default defineConfig({
             }
         }
         console.log('Done... everthing uploaded successfully');
+        await publishstatus('deployed');
         await publishlog('Build Completed...');
         await publisher.disconnect();
         process.exit(0);

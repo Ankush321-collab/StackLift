@@ -4,57 +4,48 @@
  
 @layer base {
   :root {
-    --background: 220 28% 6%;
-    --foreground: 210 40% 98%;
+    /* Core Layout Colors */
+    --background: 240 10% 4%;
+    --foreground: 0 0% 98%;
 
-    --card: 220 20% 10%;
-    --card-foreground: 210 40% 98%;
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 98%;
  
-    --popover: 220 20% 10%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 98%;
+
+    /* The Brand Color (Cyan - used for glowing shadows, buttons, accents) */
+    --primary: 190 90% 50%;
+    --primary-foreground: 240 10% 4%;
  
-    --primary: 210 40% 98%;
-    --primary-foreground: 220 28% 8%;
+    --secondary: 240 10% 12%;
+    --secondary-foreground: 0 0% 98%;
  
-    --secondary: 220 14% 16%;
-    --secondary-foreground: 210 40% 98%;
+    --muted: 240 10% 10%;
+    --muted-foreground: 240 5% 65%;
  
-    --muted: 220 16% 18%;
-    --muted-foreground: 215 16% 70%;
+    --accent: 240 10% 12%;
+    --accent-foreground: 0 0% 98%;
  
-    --accent: 220 22% 14%;
-    --accent-foreground: 210 40% 98%;
- 
-    --destructive: 0 72% 50%;
+    --destructive: 348 83% 47%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 220 18% 20%;
-    --input: 220 18% 20%;
-    --ring: 210 40% 85%;
- 
-    --radius: 0.5rem;
-  }
- 
-  .dark {
-    --background: 220 28% 6%;
-    --foreground: 210 40% 98%;
-    --card: 220 20% 10%;
-    --card-foreground: 210 40% 98%;
-    --popover: 220 20% 10%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 220 28% 8%;
-    --secondary: 220 14% 16%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 220 16% 18%;
-    --muted-foreground: 215 16% 70%;
-    --accent: 220 22% 14%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 72% 50%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 18% 20%;
-    --input: 220 18% 20%;
-    --ring: 210 40% 85%;
+    /* Elevated Surfaces */
+    --surface: 240 10% 8%;
+    --surface-2: 240 10% 12%;
+
+    /* Borders */
+    --border: 240 10% 15%;
+    --input: 240 10% 12%;
+    --ring: 190 90% 50%;
+  
+    --radius: 0.75rem;
+
+    /* State Colors */
+    --state-running: 190 90% 50%;
+    --state-succeed: 142 70% 45%;
+    --state-failed: 348 83% 47%;
+    --state-submitted: 48 96% 53%;
   }
 }
  
@@ -66,23 +57,27 @@
     @apply bg-background text-foreground;
     min-height: 100vh;
     background-image:
-      radial-gradient(1200px 600px at 10% -10%, rgba(56, 189, 248, 0.18), transparent 60%),
-      radial-gradient(900px 500px at 90% 10%, rgba(244, 114, 182, 0.18), transparent 60%),
-      radial-gradient(1200px 700px at 50% 120%, rgba(167, 139, 250, 0.12), transparent 65%);
+      radial-gradient(1200px 600px at 10% -10%, rgba(0, 188, 218, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 90% 10%, rgba(0, 188, 218, 0.06), transparent 60%),
+      radial-gradient(1200px 700px at 50% 120%, rgba(0, 188, 218, 0.04), transparent 65%);
     background-attachment: fixed;
   }
 }
 
 @layer utilities {
   .glass-card {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.35));
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.45);
+    background: linear-gradient(135deg, hsl(240 10% 7% / 0.8), hsl(240 10% 5% / 0.5));
+    border: 1px solid hsl(240 10% 15% / 0.6);
+    box-shadow: 0 20px 60px -25px color-mix(in oklab, hsl(var(--primary)) 15%, transparent);
     backdrop-filter: blur(16px);
   }
 
+  .custom-shadow {
+    box-shadow: 0 20px 60px -25px color-mix(in oklab, hsl(var(--primary)) 20%, transparent);
+  }
+
   .text-gradient {
-    background: linear-gradient(120deg, #38bdf8, #f472b6, #a78bfa);
+    background: linear-gradient(135deg, hsl(190 90% 50%), hsl(190 70% 60%));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -90,51 +85,81 @@
 
   .bg-grid {
     background-image:
-      linear-gradient(to right, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+      linear-gradient(to right, hsl(240 10% 15% / 0.4) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(240 10% 15% / 0.4) 1px, transparent 1px);
     background-size: 40px 40px;
     mask-image: radial-gradient(circle at center, black 0%, transparent 70%);
   }
 
+  .mono {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
   .animate-fade-up {
-    animation: fade-up 0.7s ease-out both;
+    animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .animate-fade-in {
-    animation: fade-in 0.8s ease-out both;
+    animation: fade-in 0.5s ease-out both;
   }
 
   .animate-float {
     animation: float 6s ease-in-out infinite;
+  }
+
+  .glow-line {
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.4), transparent);
+    height: 1px;
+  }
+
+  .terminal-glow {
+    box-shadow: 0 0 40px -10px color-mix(in oklab, hsl(var(--primary)) 25%, transparent),
+                inset 0 1px 0 hsl(0 0% 100% / 0.05);
   }
 }
 
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(16px) rotateX(4deg);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) rotateX(0);
   }
 }
 
 @keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes scroll-line {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* Custom scrollbar for terminal */
+.logs-container::-webkit-scrollbar {
+  width: 6px;
+}
+.logs-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.logs-container::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+.logs-container::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
 }
